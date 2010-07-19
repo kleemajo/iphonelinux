@@ -36,8 +36,13 @@
 #define ROM 0x20000000
 #endif
 
+#ifndef CONFIG_IPOD2G
 #define WDT_CTRL 0x3E300000
 #define WDT_CNT 0x3E300004
+#else
+#define WDT_CTRL 0x3C800000
+#define WDT_CNT 0x3C800004
+#endif
 
 #define WDT_INT 0x33
 /*

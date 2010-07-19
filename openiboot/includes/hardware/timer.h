@@ -8,8 +8,11 @@
 #define PiezoTimer 1
 
 // Devices
-
+#ifndef CONFIG_IPOD2G
 #define TIMER 0x3E200000
+#else
+#define TIMER 0x3C700000
+#endif
 
 // Registers
 
@@ -34,7 +37,11 @@
 #define TIMER_UNKREG3 0x94
 #define TIMER_UNKREG4 0x98
 #define TIMER_IRQSTAT 0x10000
+#ifndef CONFIG_IPOD2G
 #define TIMER_IRQLATCH 0xF8
+#else
+#define TIMER_IRQLATCH 0x118
+#endif
 
 // Timer
 #define NUM_TIMERS 7

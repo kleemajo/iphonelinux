@@ -239,8 +239,10 @@ uint32_t clock_calculate_frequency(uint32_t pdiv, uint32_t mdiv, FrequencyBase f
 }
 
 static void clock0_reset_frequency() {
+#ifndef CONFIG_IPOD2G
 	SET_REG(CLOCK0 + CLOCK0_ADJ1, (GET_REG(CLOCK0 + CLOCK0_ADJ1) & CLOCK0_ADJ_MASK) | clock_calculate_frequency(0x200C, 0x40, FrequencyBaseMemory));
 	SET_REG(CLOCK0 + CLOCK0_ADJ2, (GET_REG(CLOCK0 + CLOCK0_ADJ2) & CLOCK0_ADJ_MASK) | clock_calculate_frequency(0x1018, 0x4, FrequencyBaseBus));
+#endif
 }
 
 void clock_set_sdiv(int sdiv) {

@@ -4,7 +4,11 @@
 #include "hardware/s5l8900.h"
 
 // Device
+#ifndef CONFIG_IPOD2G
 #define POWER 0x39A00000	/* probably a part of the system controller */
+#else
+#define POWER 0x39700000
+#endif
 
 // Power
 #define POWER_DEFAULT_DEVICES 0xEC

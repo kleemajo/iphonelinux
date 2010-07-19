@@ -50,9 +50,13 @@ ArmReset:						// This function will setup the processor and kick off execution
 	MOV	R1, #0x38000000				// Peripheral port at 0x38000000
 	ADD	R1, #0x12				// Peripheral port size 128 MB
 	MCR     p15, 0, R1, c15, c2, 4			// Write peripheral port settings
-
+#ifndef	CONFIG_IPOD2G
 	MOV	R1, #0x38000000				// MIU register
 	ADD	R1, #0x00100000
+#else
+	MOV	R1, #0x3E000000
+	ADD	R1, #0xC
+#endif
 	LDR	R2, [R1]				// Get current settings
 	BIC	R2, #0x7				// Mask out current MIU setting
 	ORR	R2, #1					// Change setting so 0x0 is physical memory
@@ -120,8 +124,12 @@ ArmReset_loopForever:					// shouldn't reach here
 DebugReboot:						// Write to the WDT register without memory access
 							// This ought to cause a reboot same as the normal
 							// Reboot function
+#ifndef CONFIG_IPOD2G
 	MOV	R1, #0x3E000000
 	ADD	R1, #0x00300000
+#else
+	MOV	R1, #0x3C800000
+#endif
 	MOV	R0, #0x100000
 	STR	R0, [R1]
 	B	DebugReboot

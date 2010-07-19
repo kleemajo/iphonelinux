@@ -57,8 +57,14 @@ else
 		CFLAGS     += -DCONFIG_3G
 		IMG3TEMPLATE    = mk8900image/template-3g.img3
 	else
-		CFLAGS     += -DCONFIG_IPHONE
-		IMG3TEMPLATE    = mk8900image/template.img3
+		ifeq ($(PLATFORM),IPOD2G)
+			CFLAGS     += -DCONFIG_IPHONE
+			CFLAGS     += -DCONFIG_IPOD2G
+			IMG3TEMPLATE    = mk8900image/template-ipod2g.img3
+		else
+			CFLAGS     += -DCONFIG_IPHONE
+			IMG3TEMPLATE    = mk8900image/template.img3
+		endif
 	endif
 endif
 
