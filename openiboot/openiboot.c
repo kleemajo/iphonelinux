@@ -90,14 +90,14 @@ void OpenIBootStart() {
 
 	startUSB();
 
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 	camera_setup();
 	radio_setup();
 #endif
 	sdio_setup();
 	wlan_setup();
 	accel_setup();
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 	als_setup();
 #endif
 
