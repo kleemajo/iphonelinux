@@ -777,7 +777,7 @@ void cmd_accel(int argc, char** argv) {
 	bufferPrintf("x: %d, y: %d, z: %d\r\n", x, y, z);
 }
 
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 void cmd_als(int argc, char** argv) {
 	bufferPrintf("data = %d\r\n", als_data());
 }
@@ -887,7 +887,7 @@ void cmd_audiohw_headphone_vol(int argc, char** argv)
 	bufferPrintf("Set headphone volumes to: %d / %d\r\n", left, right);
 }
 
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 void cmd_audiohw_speaker_vol(int argc, char** argv)
 {
 	if(argc < 2)
@@ -977,7 +977,7 @@ void cmd_wlan_prog_real(int argc, char** argv) {
 	wlan_prog_real((void*) address, len);
 }
 
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 void cmd_radio_send(int argc, char** argv) {
 	if(argc < 2) {
 		bufferPrintf("Usage: %s <command>\r\n", argv[0]);
@@ -1153,7 +1153,7 @@ OPIBCommand CommandList[] =
 		{"iic_read", "read a IIC register", cmd_iic_read},
 		{"iic_write", "write a IIC register", cmd_iic_write},
 		{"accel", "display accelerometer data", cmd_accel},
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		{"als", "display ambient light sensor data", cmd_als},
 		{"als_channel", "set channel to get ALS data from", cmd_als_channel},
 		{"als_en", "enable continuous reporting of ALS data", cmd_als_en},
@@ -1163,7 +1163,7 @@ OPIBCommand CommandList[] =
 		{"sdio_setup", "restart SDIO stuff", cmd_sdio_setup},
 		{"wlan_prog_helper", "program wlan fw helper", cmd_wlan_prog_helper},
 		{"wlan_prog_real", "program wlan fw", cmd_wlan_prog_real},
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		{"radio_send", "send a command to the baseband", cmd_radio_send},
 		{"radio_nvram_list", "list entries in baseband NVRAM", cmd_radio_nvram_list},
 		{"radio_register", "register with a cellular network", cmd_radio_register},
@@ -1198,7 +1198,7 @@ OPIBCommand CommandList[] =
 		{"audiohw_transfers_done", "display how many times the audio buffer has been played", cmd_audiohw_transfers_done},
 		{"audiohw_play_pcm", "queue some PCM data for playback", cmd_audiohw_play_pcm},
 		{"audiohw_headphone_vol", "set the headphone volume", cmd_audiohw_headphone_vol},
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		{"audiohw_speaker_vol", "set the speaker volume", cmd_audiohw_speaker_vol},
 #endif
 		{"audiohw_position", "print the playback position", cmd_audiohw_position},

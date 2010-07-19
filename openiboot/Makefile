@@ -22,6 +22,12 @@ ifeq ($(PLATFORM),IPOD)
 	SRC_C          += multitouch-z2.c wm8958.c piezo.c
 endif
 
+ifeq ($(PLATFORM), IPOD2G)
+	SRC_C          += multitouch-z2.c wm8991.c
+	# Note: the 2nd generation iPod touch uses the Cirrus Logic CS4398 codec,
+	# but use the wm8991 code for now so that everything compiles.
+endif
+
 # Variables
 ifeq ($(SMALL),YES)
 	LOAD           ?= 0x22000000
@@ -58,7 +64,6 @@ else
 		IMG3TEMPLATE    = mk8900image/template-3g.img3
 	else
 		ifeq ($(PLATFORM),IPOD2G)
-			CFLAGS     += -DCONFIG_IPHONE
 			CFLAGS     += -DCONFIG_IPOD2G
 			IMG3TEMPLATE    = mk8900image/template-ipod2g.img3
 		else

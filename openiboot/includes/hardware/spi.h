@@ -38,6 +38,7 @@
 
 #define GPIO_SPI0_CS0_IPHONE 0x400
 #define GPIO_SPI0_CS0_IPOD 0x700
+#define GPIO_SPI0_CS0_IPOD2G 0x0		// Placeholder to make code compile
 
 #ifdef CONFIG_IPOD
 #define GPIO_SPI2_CS0 0x1804
@@ -50,8 +51,10 @@
 
 #ifdef CONFIG_IPOD
 #define GPIO_SPI0_CS0 GPIO_SPI0_CS0_IPOD
-#else
+#elif defined(CONFIG_IPHONE) || defined(CONFIG_3G)
 #define GPIO_SPI0_CS0 GPIO_SPI0_CS0_IPHONE
+#elif defined(CONFIG_IPOD2G)
+#define GPIO_SPI0_CS0 GPIO_SPI0_CS0_IPOD2G
 #endif
 
 #define GPIO_SPI1_CS0 0x1800
@@ -59,6 +62,10 @@
 #ifdef CONFIG_3G
 #define GPIO_SPI0_CS1 0x705
 #define GPIO_SPI0_CS2 0x706
+#endif
+
+#ifdef CONFIG_IPOD2G
+#define GPIO_SPI2_CS0 0x705			// Placeholder to make code compile
 #endif
 
 #define NUM_SPIPORTS 3

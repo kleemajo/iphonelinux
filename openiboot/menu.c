@@ -241,7 +241,7 @@ int menu_setup(int timeout) {
 		framebuffer_clear();
 
 #ifndef NO_HFS
-#ifndef CONFIG_IPOD
+#if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		radio_setup();
 #endif
 		nand_setup();

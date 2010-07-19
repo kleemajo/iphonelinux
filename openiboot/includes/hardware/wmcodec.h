@@ -18,6 +18,10 @@
 #define WMCODEC_I2C_SLAVE_ADDR 0x34
 #endif
 
+#ifdef CONFIG_IPOD2G
+#define WMCODEC_I2C 0		// Used to make code compile for now. The 2G iPod uses a Cirrus Logic CS4398!
+#endif
+
 #define WMCODEC_INT 0x2c
 #define WMCODEC_INT_GPIO 0x1604
 
