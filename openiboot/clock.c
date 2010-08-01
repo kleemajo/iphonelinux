@@ -151,7 +151,7 @@ int clock_setup() {			// S5L8720
 	TimebaseFrequency = FixedFrequency / 4;
 	UsbPhyFrequency = get_base_frequency();
 
-	TicksPerSec = get_base_frequency();
+	TicksPerSec = FixedFrequency / 2;
 
 	return 0;
 }
