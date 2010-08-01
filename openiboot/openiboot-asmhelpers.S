@@ -43,6 +43,7 @@
 .global CallThumb
 
 .global Reboot
+.global EndlessLoop
 
 .global CurrentRunning
 
@@ -264,6 +265,9 @@ Reboot:
 	MOV	R1, #WDT_ENABLE
 	STR	R1, [R0]
 	B	Reboot
+
+EndlessLoop:
+	B	EndlessLoop
 
 .data
 

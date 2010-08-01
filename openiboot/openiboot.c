@@ -63,8 +63,6 @@ CommandQueue* commandQueue = NULL;
 static void startUSB();
 
 void OpenIBootStart() {
-	Reboot();
-	while (1) {}
 	setup_openiboot();
 	pmu_charge_settings(TRUE, FALSE, FALSE);
 
@@ -370,6 +368,9 @@ static int setup_devices() {
 	power_setup();
 	clock_setup();
 
+	// End of reversal
+	while (1) {}
+
 	// Need interrupts for everything afterwards
 	interrupt_setup();
 
@@ -397,6 +398,9 @@ static int setup_openiboot() {
 	mmu_setup();
 	tasks_setup();
 	setup_devices();
+	
+	// End of reversal
+	while (1) {}
 
 	LeaveCriticalSection();
 
