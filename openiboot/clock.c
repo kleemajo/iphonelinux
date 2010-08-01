@@ -30,9 +30,6 @@ uint32_t ClockSDiv;
 
 uint32_t TicksPerSec;
 
-//debug
-#include "openiboot-asmhelpers.h"
-
 #ifdef CONFIG_IPOD2G
 int clock_setup() {			// S5L8720
 	uint32_t config;

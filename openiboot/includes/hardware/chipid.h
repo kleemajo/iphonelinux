@@ -22,6 +22,7 @@
 
 #ifdef CONFIG_IPOD2G
 #define CHIPID_GET_SECURITY_EPOCH(x) (GET_BITS((x), 0, 1))
+#define CHIPID_GET_POWER_EPOCH(x) (GET_BITS((x), 4, 7) > 3 ? 3 : 4)
 #endif
 
 

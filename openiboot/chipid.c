@@ -10,6 +10,10 @@ int chipid_spi_clocktype() {
 unsigned int chipid_get_security_epoch() {
 	return CHIPID_GET_SECURITY_EPOCH(GET_REG(CHIPID + CHIPINFO));
 }
+
+unsigned int chipid_get_power_epoch() {
+	return CHIPID_GET_POWER_EPOCH(GET_REG(CHIPID + CHIPINFO));
+}
 #endif
 
 
