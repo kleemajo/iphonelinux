@@ -2,14 +2,18 @@
 #define CLOCK_H
 
 #include "openiboot.h"
+#ifdef CONFIG_IPOD2G
+#include "hardware/clockS5L8720.h"
+#else
 #include "hardware/clock1.h"
+#endif
 
-typedef enum Clock0ConfigCode {
-	Clock0ConfigCode0 = 0,
-	Clock0ConfigCode1 = 1,
-	Clock0ConfigCode2 = 2,
-	Clock0ConfigCode3 = 3
-} Clock0ConfigCode;
+typedef enum ClockDivisorCode {
+	ClockDivisorCode0 = 0,
+	ClockDivisorCode1 = 1,
+	ClockDivisorCode2 = 2,
+	ClockDivisorCode3 = 3
+} ClockDivisorCode;
 
 extern uint32_t ClockPLL;
 extern uint32_t PLLFrequencies[NUM_PLL];
@@ -35,14 +39,23 @@ typedef enum FrequencyBase {
 	FrequencyBaseUnknown,
 	FrequencyBaseDisplay,
 	FrequencyBaseFixed,
-	FrequencyBaseTimebase
+	FrequencyBaseTimebase,
+	#ifdef CONFIG_IPOD2G
+	FrequencyBaseUsbPhy,
+	#endif
 } FrequencyBase;
 
-int clock_set_bottom_bits_38100000(Clock0ConfigCode code);
 int clock_setup();
 void clock_gate_switch(uint32_t gate, OnOff on_off);
 uint32_t clock_get_frequency(FrequencyBase freqBase);
-uint32_t clock_calculate_frequency(uint32_t pdiv, uint32_t mdiv, FrequencyBase freqBase);
+
+// Processor specific functions
+#ifdef CONFIG_IPOD2G		// S5L8720
+unsigned int get_base_frequency(void);
+#else						// S5L8900
+int clock_set_bottom_bits_38100000(Clock0ConfigCode code);
 void clock_set_sdiv(int sdiv);
+uint32_t clock_calculate_frequency(uint32_t pdiv, uint32_t mdiv, FrequencyBase freqBase);
+#endif
 
 #endif

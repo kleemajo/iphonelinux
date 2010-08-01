@@ -5,4 +5,10 @@
 
 int chipid_spi_clocktype();
 
+#ifdef CONFIG_IPOD2G
+unsigned int chipid_get_security_epoch();
 #endif
+
+#endif
+
+

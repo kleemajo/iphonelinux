@@ -45,7 +45,11 @@
 
 // Timer
 #define NUM_TIMERS 7
+#ifdef CONFIG_IPOD2G
+#define TIMER_CLOCKGATE 0x13
+#else
 #define TIMER_CLOCKGATE 0x25
+#endif
 #define TIMER_IRQ 0x7
 #define TIMER_STATE_START 1
 #define TIMER_STATE_STOP 0
