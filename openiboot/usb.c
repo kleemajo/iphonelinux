@@ -96,7 +96,9 @@ int usb_setup() {
 	change_state(USBStart);
 
 	// Power on hardware
+#ifndef CONFIG_IPOD2G
 	power_ctrl(POWER_USB, ON);
+#endif
 	udelay(USB_START_DELAYUS);
 
 	// Initialize our data structures
@@ -1001,7 +1003,10 @@ int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHand
 }
 
 int usb_shutdown() {
+#ifndef CONFIG_IPOD2G
 	power_ctrl(POWER_USB, ON);
+#endif
+
 	clock_gate_switch(USB_OTGCLOCKGATE, ON);
 	clock_gate_switch(USB_PHYCLOCKGATE, ON);
 
@@ -1015,7 +1020,10 @@ int usb_shutdown() {
 
 	clock_gate_switch(USB_OTGCLOCKGATE, OFF);
 	clock_gate_switch(USB_PHYCLOCKGATE, OFF);
+
+#ifndef CONFIG_IPOD2G
 	power_ctrl(POWER_USB, OFF);
+#endif
 
 	releaseConfigurations();
 	releaseStringDescriptors();

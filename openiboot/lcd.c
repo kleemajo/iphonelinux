@@ -232,7 +232,9 @@ static int initDisplay() {
 
 	memcpy(info, &optC, sizeof(LCDInfo));
 
+#ifndef CONFIG_IPOD2G
 	power_ctrl(POWER_LCD, ON);
+#endif
 	clock_gate_switch(LCD_CLOCKGATE1, ON);
 	clock_gate_switch(LCD_CLOCKGATE2, ON);
 
