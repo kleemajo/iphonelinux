@@ -296,6 +296,7 @@ int clock_setup() {		// S5L8900
 
 #ifdef CONFIG_IPOD2G
 // Data table for the various register settings needed for each clock gate switch
+// TODO: move this to the hardware/clock.h file
 ClockGate ClockGateTable[29] = {
 	// id	reg_0_bits	reg_1_bits	reg_2_bits	reg_3_bits	reg_4_bits
 	{0x0,	0x00000080,	0x0,		0x0,		0x0,		0x0		},

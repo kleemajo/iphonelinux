@@ -4,13 +4,17 @@
 #include "hardware/s5l8900.h"
 
 // Device
-#define USB 0x38400000
+#define USB_OTG 0x38400000
 #define USB_PHY 0x3C400000
 
-// Registers
+// PHY Registers
 #define OPHYPWR 0
 #define OPHYCLK 0x4
 #define ORSTCON 0x8
+#define OPHYUNK1 0x1C
+#define OPHYUNK2 0x44
+
+// OTG Registers
 #define GOTGCTL 0x0
 #define GOTGINT 0x4
 #define GAHBCFG 0x8
@@ -21,26 +25,30 @@
 #define GRXFSIZ 0x24
 #define GNPTXFSIZ 0x28
 #define GNPTXFSTS 0x2C
+#define USB_ENDPOINT_DIRECTIONS 0x44
+#define HPTXFSIZ 0x100
+#define DCFG 0x800
+#define DCTL 0x804
+#define DSTS 0x808
 #define DIEPMSK 0x810
 #define DOEPMSK 0x814
 #define DAINT 0x818
 #define DAINTMSK 0x81C
 #define USB_INREGS 0x900
 #define USB_OUTREGS 0xB00
-
-#define DCFG 0x800
-#define DCTL 0x804
-#define DSTS 0x808
-
-#define USB_ENDPOINT_DIRECTIONS 0x44
-#define USB_ONOFF 0xE00
+#define PCGCCTL 0xE00
 
 // Values
 #define USB_INTERRUPT 0x13
 
+#ifdef CONFIG_IPOD2G
+#define USB_OTGCLOCKGATE 0x18
+#define USB_PHYCLOCKGATE 0x19
+#else
 #define USB_OTGCLOCKGATE 0x2
 #define USB_PHYCLOCKGATE 0x23
-#define USB_ONOFF_OFF 3	// bits 0, 1
+#endif
+#define PCGCCTL_OFF 3	// bits 0, 1
 
 #define OPHYPWR_FORCESUSPEND 0x1
 #define OPHYPWR_PLLPOWERDOWN 0x2
@@ -49,10 +57,27 @@
 #define OPHYPWR_UNKNOWNPOWERDOWN 0x10
 #define OPHYPWR_POWERON 0x0	// all the previous flags are off
 
+#ifdef CONFIG_IPOD2G
+#define OPHYCLK_CLKSEL_MASK 0x3
+#define OPHYCLK_CLKSEL_48MHZ 0x2
+#define OPHYCLK_CLKSEL_12MHZ 0x0
+#define OPHYCLK_CLKSEL_24MHZ 0x1
+#define OPHYCLK_CLKSEL_OTHER 0x3
+#define OPHYCLK_SPEED_48MHZ 48000000
+#define OPHYCLK_SPEED_12MHZ 12000000
+#define OPHYCLK_SPEED_24MHZ 24000000
+#else
 #define OPHYCLK_CLKSEL_MASK 0x3
 #define OPHYCLK_CLKSEL_48MHZ 0x0
 #define OPHYCLK_CLKSEL_12MHZ 0x2
 #define OPHYCLK_CLKSEL_24MHZ 0x3
+#endif
+
+#ifdef CONFIG_IPOD2G
+#define OPHYUNK1_START 0x6
+#define OPHYUNK1_STOP_MASK 0x2
+#define OPHYUNK2_START 0xE3F
+#endif
 
 #define GOTGCTL_BSESSIONVALID (1 << 19)
 #define GOTGCTL_SESSIONREQUEST (1 << 1)
@@ -130,7 +155,7 @@
 #define DEPTSIZ_XFERSIZ_MASK 0x1FFFF
 
 // ENDPOINT_DIRECTIONS register has two bits per endpoint. 0, 1 for endpoint 0. 1, 2 for end point 1, etc.
-#define USB_EP_DIRECTION(ep) ((GET_REG(USB + USB_ENDPOINT_DIRECTIONS) >> ((ep) * 2)) & 0x3)
+#define USB_EP_DIRECTION(ep) ((GET_REG(USB_OTG + USB_ENDPOINT_DIRECTIONS) >> ((ep) * 2)) & 0x3)
 #define USB_ENDPOINT_DIRECTIONS_BIDIR 0
 #define USB_ENDPOINT_DIRECTIONS_IN 1
 #define USB_ENDPOINT_DIRECTIONS_OUT 2

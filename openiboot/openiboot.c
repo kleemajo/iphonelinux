@@ -64,6 +64,7 @@ static void startUSB();
 
 void OpenIBootStart() {
 	setup_openiboot();
+/*
 	pmu_charge_settings(TRUE, FALSE, FALSE);
 
 	framebuffer_setdisplaytext(TRUE);
@@ -85,9 +86,11 @@ void OpenIBootStart() {
 	}
 #endif
 #endif
+*/
 
 	startUSB();
 
+/*
 #if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 	camera_setup();
 	radio_setup();
@@ -106,14 +109,15 @@ void OpenIBootStart() {
 
 	pmu_set_iboot_stage(0);
 	startScripting("openiboot"); //start script mode if there is a file
+*/
 	bufferPrintf("version: %s\r\n", OPENIBOOT_VERSION_STR);
 	bufferPrintf("-----------------------------------------------\r\n");
 	bufferPrintf("              WELCOME TO OPENIBOOT\r\n");
 	bufferPrintf("-----------------------------------------------\r\n");
 	DebugPrintf("                    DEBUG MODE\r\n");
-
+/*
 	audiohw_postinit();
-
+*/
 	// Process command queue
 	while(TRUE) {
 		char* command = NULL;
@@ -133,7 +137,6 @@ void OpenIBootStart() {
 		}
 	}
 	// should not reach here
-
 }
 
 static uint8_t* controlSendBuffer = NULL;
@@ -362,12 +365,6 @@ static void startUSB()
 	usb_start(enumerateHandler, startHandler);
 }
 
-Event testEvent;
-
-static void test_event_handler(Event* event, void* opaque) {
-	Reboot();
-}
-
 static int setup_devices() {
 	// Basic prerequisites for everything else
 	miu_setup();
@@ -376,40 +373,23 @@ static int setup_devices() {
 
 	// Need interrupts for everything afterwards
 	interrupt_setup();
-
-	timer_setup();
-	event_setup();
-	
-	LeaveCriticalSection();
-	event_add(&testEvent, 10000000, test_event_handler, NULL);
-
-	// End of reversal
-	while (1) {}
-
-
-
-
-
-
-	// Need interrupts for everything afterwards
-	interrupt_setup();
-
+/*
 	gpio_setup();
-
+*/
 	// For scheduling/sleeping niceties
 	timer_setup();
 	event_setup();
-	wdt_setup();
+	//wdt_setup();
 
 	// Other devices
 	usb_shutdown();
-	uart_setup();
+/*	uart_setup();
 	i2c_setup();
 
 	dma_setup();
 
 	spi_setup();
-
+*/
 	return 0;
 }
 
@@ -418,16 +398,16 @@ static int setup_openiboot() {
 	mmu_setup();
 	tasks_setup();
 	setup_devices();
-
+/*
 	// End of reversal
 	while (1) {}
-
+*/
 	LeaveCriticalSection();
 
-	#ifndef CONFIG_IPOD2G
+#ifndef CONFIG_IPOD2G
 	clock_set_sdiv(0);
-	#endif
-
+#endif
+/*
 	aes_setup();
 
 	nor_setup();
@@ -442,6 +422,7 @@ static int setup_openiboot() {
 
 	camera_setup();
 #endif
+*/
 	return 0;
 }
 

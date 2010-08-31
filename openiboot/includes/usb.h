@@ -5,7 +5,11 @@
 #define VENDOR_APPLE 0x5AC
 
 // assigned by Apple
+#ifdef CONFIG_IPOD2G
+#define PRODUCT_IPHONE 0x1281
+#else
 #define PRODUCT_IPHONE 0x1280
+#endif
 #define DEVICE_IPHONE 0x1103
 
 // values we're using
