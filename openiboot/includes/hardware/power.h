@@ -20,6 +20,10 @@
 #define POWER_CONFIG0 0x0
 #define POWER_CONFIG1 0x20
 #define POWER_CONFIG2 0x6C
+#ifdef CONFIG_IPOD2G
+#define POWER_CONFIG3 0x74
+#endif
+
 #define POWER_ONCTRL 0xC
 #define POWER_OFFCTRL 0x10
 #define POWER_SETSTATE 0x8
@@ -28,10 +32,15 @@
 #define POWER_ID_EPOCH(x) ((x) >> 24)
 
 // Values
+#ifdef CONFIG_IPOD2G
+#define POWER_CONFIG0_RESET 0x1021002
+#define POWER_CONFIG2_RESET 0x0
+#define POWER_CONFIG3_RESET_DIVIDER 1000000
+#else
 #define POWER_CONFIG0_RESET 0x1123009
 #define POWER_CONFIG1_RESET 0x20
 #define POWER_CONFIG2_RESET 0x0
-
+#endif
 
 #endif
 
