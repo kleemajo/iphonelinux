@@ -2,14 +2,11 @@
 #define USB_H
 
 // assigned by USB Org
+#define VENDOR_NETCHIP 0x525		// Used to appear as a non-apple product
 #define VENDOR_APPLE 0x5AC
 
 // assigned by Apple
-#ifdef CONFIG_IPOD2G
-#define PRODUCT_IPHONE 0x1281
-#else
 #define PRODUCT_IPHONE 0x1280
-#endif
 #define DEVICE_IPHONE 0x1103
 
 // values we're using
@@ -69,12 +66,14 @@ typedef enum USBUsageType {
 } USBUsageType;
 
 enum USBDescriptorType {
-	USBDeviceDescriptorType = 1,
-	USBConfigurationDescriptorType = 2,
-	USBStringDescriptorType = 3,
-	USBInterfaceDescriptorType = 4,
-	USBEndpointDescriptorType = 5,
-	USBDeviceQualifierDescriptorType = 6
+	USBDeviceDescriptorType						= 1,
+	USBConfigurationDescriptorType				= 2,
+	USBStringDescriptorType						= 3,
+	USBInterfaceDescriptorType					= 4,
+	USBEndpointDescriptorType					= 5,
+	USBDeviceQualifierDescriptorType			= 6,
+	USBOtherSpeedConfigurationDescriptorType	= 7,
+	USBInterfacePowerDescriptorType				= 8,
 };
 
 typedef enum USBSpeed {
@@ -99,11 +98,11 @@ typedef struct USBEPRegisters {
 	volatile uint32_t control;
 	volatile uint32_t field_4;
 	volatile uint32_t interrupt;
-	volatile uint32_t field_8;
+	volatile uint32_t field_C;
 	volatile uint32_t transferSize;
 	volatile void* dmaAddress;
 	volatile uint32_t field_18;
-	volatile uint32_t field_1C;
+	volatile uint32_t dmaBuffer;
 } USBEPRegisters;
 
 typedef struct USBDeviceDescriptor {
@@ -224,30 +223,37 @@ typedef struct OpenIBootCmd {
 #define USBSetupPacketRequestTypeType(x) GET_BITS(x, 5, 2)
 #define USBSetupPacketRequestTypeRecpient(x) GET_BITS(x, 0, 5)
 
-#define USBSetupPacketHostToDevice 0
-#define USBSetupPacketDeviceToHost 1
-#define USBSetupPacketStandard 0
-#define USBSetupPacketClass 1
-#define USBSetupPacketVendor 2
-#define USBSetupPacketRecpientDevice 0
-#define USBSetupPacketRecpientInterface 1
-#define USBSetupPacketRecpientEndpoint 2
-#define USBSetupPacketRecpientOther 3
+#define USBSetupPacketHostToDevice 			0
+#define USBSetupPacketDeviceToHost 			1
 
-#define USB_CLEAR_FEATURE 1
-#define USB_GET_CONFIGURATION 8
-#define USB_GET_DESCRIPTOR 6
-#define USB_GET_INTERFACE 10
-#define USB_GET_STATUS 0
-#define USB_SET_ADDRESS 5
-#define USB_SET_CONFIGURATION 9
-#define USB_SET_DESCRIPTOR 7
-#define USB_SET_FEATURE 3
-#define USB_SET_INTERFACE 11
-#define USB_SYNCH_FRAME 12
+#define USBSetupPacketStandard 				0
+#define USBSetupPacketClass 				1
+#define USBSetupPacketVendor				2
 
-int usb_setup();
-int usb_start(USBEnumerateHandler hEnumerate, USBStartHandler hStart);
+#define USBSetupPacketRecipientDevice		0
+#define USBSetupPacketRecipientInterface	1
+#define USBSetupPacketRecipientEndpoint		2
+#define USBSetupPacketRecipientOther		3
+
+#define USB_GET_STATUS 			0
+#define USB_CLEAR_FEATURE 		1
+#define USB_SET_FEATURE			3
+#define USB_SET_ADDRESS 		5
+#define USB_GET_DESCRIPTOR		6
+#define USB_SET_DESCRIPTOR		7
+#define USB_GET_CONFIGURATION	8
+#define USB_SET_CONFIGURATION	9
+#define USB_GET_INTERFACE		10
+#define USB_SET_INTERFACE		11
+#define USB_SYNCH_FRAME			12
+
+
+
+
+
+
+int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart);
+int usb_start();
 int usb_shutdown();
 int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandler handler, uint32_t token);
 void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType);

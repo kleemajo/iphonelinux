@@ -89,7 +89,6 @@ void OpenIBootStart() {
 */
 
 	startUSB();
-
 /*
 #if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 	camera_setup();
@@ -357,12 +356,13 @@ static void startHandler() {
 
 static void startUSB()
 {
-	usb_setup();
+	usb_setup(enumerateHandler, startHandler);
+//TODO: figure out where this is done in iboot
+//-> almost guaranteed to be the calls to "usb_setup_ep"
 	usb_install_ep_handler(4, USBOut, controlReceived, 0);
 	usb_install_ep_handler(2, USBOut, dataReceived, 0);
 	usb_install_ep_handler(3, USBIn, controlSent, 0);
 	usb_install_ep_handler(1, USBIn, dataSent, 0);
-	usb_start(enumerateHandler, startHandler);
 }
 
 static int setup_devices() {
