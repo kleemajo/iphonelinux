@@ -13,6 +13,7 @@
 #define ORSTCON 		0x8
 #define OPHYUNK1 		0x1C
 #define OPHYUNK2 		0x44
+#define OPHYUNK3		0x48
 
 // OTG Registers
 #define GOTGCTL			0x0		// core USB configuration
@@ -36,6 +37,8 @@
 #define GHWCFG2 		0x48	// user hardware config2 (read only)
 #define GHWCFG3 		0x4C	// user hardware config3 (read only)
 #define GHWCFG4 		0x50	// user hardware config4 (read only)
+
+#define DIEPTXF(X)		(0x104 + 4*X)	// device transmit fifo
 
 #define DCFG			0x800	// device configuration
 #define DCTL 			0x804	// device control
@@ -127,13 +130,18 @@
 #define GUSBCFG_PHYIF16BIT 			(1 << 3)
 #define USB_UNKNOWNREG1_START 		0x1708
 
-#define GRSTCTL_AHBIDLE 		(1 << 31)
-#define GRSTCTL_CORESOFTRESET 	0x1
+#define GRSTCTL_CORESOFTRESET 		(1 << 0)
+#define GRSTCTL_TXFFLSH				(1 << 5)
+#define GRSTCTL_TXFNUM_MASK			(0x1f << 6)
+#define GRSTCTL_UNKN1				(1 << 11)
+#define GRSTCTL_AHBIDLE 			(1 << 31)
+#define GRSTCTL_UNKN_TX_FIFO_SHIFT	12
 
 #define GINTMSK_NONE 		0x0
 #define GINTMSK_OTG 		(1 << 2)
 #define GINTMSK_SOF 		(1 << 3)
 #define GINTMSK_INNAK 		(1 << 6)
+#define GINTMSK_OUTNAK		(1 << 7)
 #define GINTMSK_SUSPEND 	(1 << 11)
 #define GINTMSK_RESET 		(1 << 12)
 #define GINTMSK_ENUMDONE 	(1 << 13)
@@ -143,14 +151,17 @@
 #define GINTMSK_DISCONNECT 	(1 << 29)
 #define GINTMSK_RESUME 		(1 << 31)
 
-#define RX_FIFO_DEPTH 		0x11B
-#define TX_FIFO_DEPTH 		0x11B
-#define TX_FIFO_STARTADDR 	0x200
-#define TX_FIFO_UNKN1 		(1 << 24)
-
-#define GNPTXFSIZ_DEPTH_SHIFT 16
+#define GRXFSIZ_DEPTH 				0x11B
+#define GNPTXFSIZ_STARTADDR			0x11B
+#define GNPTXFSIZ_DEPTH 			0x100
+#define DPTXFSIZ_BASE_STARTADDR		0x21B
+#define DPTXFSIZ_DEPTH				0x100
+#define FIFO_DEPTH_SHIFT			16
+#define USB_NUM_TX_FIFOS 			15
 
 #define GNPTXFSTS_GET_TXQSPCAVAIL(x) GET_BITS(x, 16, 8)
+
+#define GHWCFG4_DED_FIFO_EN		(1 << 25)
 
 #define DAINT_ALL			0xFFFFFFFF
 #define DAINT_NONE			0
@@ -165,6 +176,7 @@
 #define DCTL_SFTDISCONNECT 	(1 << 1)
 #define DCTL_SGNPINNAK		(1 << 7)
 #define DCTL_CGNPINNAK 		(1 << 8)
+#define DCTL_SGOUTNAK		(1 << 9)
 #define DCTL_CGOUTNAK 		(1 << 10)
 #define DCTL_PROGRAMDONE 	(1 << 11)
 #define DCTL_SETD0PID 		(1 << 28)
@@ -180,6 +192,7 @@
 #define DCFG_DEVICEADDR_UNSHIFTED_MASK 0x7F
 #define DCFG_DEVICEADDR_SHIFT 4
 #define DCFG_DEVICEADDRMSK (DCFG_DEVICEADDR_UNSHIFTED_MASK << DCFG_DEVICEADDR_SHIFT)
+#define DCFG_DEVICEADDR_RESET 0
 
 #define DOEPTSIZ0_SUPCNT_MASK 0x3
 #define DOEPTSIZ0_SUPCNT_SHIFT 29
@@ -189,7 +202,7 @@
 #define DIEPTSIZ_MC_SHIFT 29
 #define DEPTSIZ_PKTCNT_MASK 0x3FF
 #define DEPTSIZ_PKTCNT_SHIFT 19
-#define DEPTSIZ_XFERSIZ_MASK 0x1FFFF
+#define DEPTSIZ_XFERSIZ_MASK 0x7FFFF
 
 // ENDPOINT_DIRECTIONS register has two bits per endpoint. 0, 1 for endpoint 0. 2, 3 for end point 1, etc.
 #define USB_EP_DIRECTION(ep) ((GET_REG(USB_OTG + GHWCFG1) >> ((ep) * 2)) & 0x3)
@@ -210,22 +223,30 @@
 
 #define USB_EPCON_ENABLE		(1 << 31)
 #define USB_EPCON_DISABLE		(1 << 30)
+#define USB_EPCON_SET0PID		(1 << 28)
 #define USB_EPCON_SETNAK		(1 << 27)
 #define USB_EPCON_CLEARNAK		(1 << 26)
 #define USB_EPCON_STALL			(1 << 21)
 #define USB_EPCON_ACTIVE		(1 << 15)
 #define USB_EPCON_TYPE_MASK		0x3
 #define USB_EPCON_TYPE_SHIFT	18
+#define USB_EPCON_TXFNUM_MASK	0xF
+#define USB_EPCON_TXFNUM_SHIFT	22
 #define USB_EPCON_MPS_MASK		0x7FF
+#define USB_EPCON_NONE			0x0
+
+#define USB_EPXFERSZ_NONE				0x0
+#define USB_EPXFERSZ_PKTCNT_BIT_0(x)	GET_BITS(x, 19, 1)
+#define USB_EPXFERSZ_PKTCNT(x)			GET_BITS(x, 19, 10)
 
 // in EP interrupts
 #define USB_EPINT_INEPNakEff 	(1 << 6)
 #define USB_EPINT_INTknEPMis 	(1 << 5)
 #define USB_EPINT_INTknTXFEmp 	(1 << 4)
 #define USB_EPINT_TimeOUT 		(1 << 3)	// Non ISO in EP timeout
-#define USB_EPINT_AHBErr 		(1 << 2)	// AHB error. Can be used for out EPs too.
-#define USB_EPINT_EPDisbld 		(1 << 1)	// EP disabled. Can be used for out EPs too.
-#define USB_EPINT_XferCompl 	(1 << 0)	// Transfer done. Can be used for out EPs too.
+#define USB_EPINT_AHBErr 		(1 << 2)	// AHB error. Used for out EPs too.
+#define USB_EPINT_EPDisbld 		(1 << 1)	// EP disabled. Used for out EPs too.
+#define USB_EPINT_XferCompl 	(1 << 0)	// Transfer done. Used for out EPs too.
 
 // out EP interrupts
 #define USB_EPINT_Back2BackSetup 	(1 << 6)	// Back to back setup received

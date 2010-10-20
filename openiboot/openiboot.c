@@ -354,8 +354,7 @@ static void startHandler() {
 	usb_receive_interrupt(4, controlRecvBuffer, sizeof(OpenIBootCmd));
 }
 
-static void startUSB()
-{
+static void startUSB() {
 	usb_setup(enumerateHandler, startHandler);
 //TODO: figure out where this is done in iboot
 //-> almost guaranteed to be the calls to "usb_setup_ep"

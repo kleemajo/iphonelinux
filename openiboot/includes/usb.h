@@ -11,6 +11,7 @@
 
 // values we're using
 #define USB_MAX_PACKETSIZE 64
+#define USB_CONTROLEP_MAX_TRANSFER_SIZE 64
 #define USB_SETUP_PACKETS_AT_A_TIME 1
 #define CONTROL_SEND_BUFFER_LEN 0x80
 #define CONTROL_RECV_BUFFER_LEN 0x80
@@ -82,17 +83,46 @@ typedef enum USBSpeed {
 	USBLowSpeed = 2
 } USBSpeed;
 
-typedef void (*USBEndpointHandler)(uint32_t token);
+typedef enum USBTransferStatus {
+	USBTransferInProgress = -1,
+	USBTransferSuccess = 0,
+	USBTransferFailed = 1,
+} USBTransferStatus;
 
-typedef struct USBEndpointHandlerInfo {
-	USBEndpointHandler	handler;
-	uint32_t		token;
-} USBEndpointHandlerInfo;
+// This typedef needs to be here for the function typdef below to compile
+typedef struct USBTransfer USBTransfer;
 
-typedef struct USBEndpointBidirHandlerInfo {
-	USBEndpointHandlerInfo in;
-	USBEndpointHandlerInfo out;
-} USBEndpointBidirHandlerInfo;
+typedef void (*USBEndpointHandler)(USBTransfer * transfer);
+
+struct USBTransfer {
+	//TODO: figure out what is needed and what isn't
+	//uint32_t endpoint;
+	uint8_t * buffer;
+	USBTransferStatus status;
+	uint32_t bufferEndOffset;
+	uint32_t bufferStartOffset;
+	USBEndpointHandler handler;
+	USBTransfer * next;
+};
+
+typedef struct USBEndpointTransferInfo {
+	//TODO: figure out what is needed and what isn't
+	//uint32_t endpoint; (probably not needed)
+	uint32_t packetSize;
+	USBTransferType type;
+	uint32_t token;
+	uint32_t bytesLeft;				// bytes left in current transfer
+	uint32_t packetsLeft;			// packets left in current transfer
+	//uint32_t unknS5l8900;
+	USBTransfer * currentTransfer;
+	USBTransfer * lastTransfer;
+	uint32_t txFifo;		// Note: 1-based due to hardware setup
+} USBEndpointTransferInfo;
+
+typedef struct USBEndpointBidirTransferInfo {
+	USBEndpointTransferInfo in;
+	USBEndpointTransferInfo out;
+} USBEndpointBidirTransferInfo;
 
 typedef struct USBEPRegisters {
 	volatile uint32_t control;
@@ -196,6 +226,7 @@ typedef struct USBSetupPacket {
 	uint16_t wLength;
 } __attribute__ ((__packed__)) USBSetupPacket;
 
+/*
 typedef struct RingBuffer {
 	int8_t* writePtr;
 	int8_t* readPtr;
@@ -204,9 +235,7 @@ typedef struct RingBuffer {
 	int8_t* bufferStart;
 	int8_t* bufferEnd;
 } RingBuffer;
-
-typedef void (*USBStartHandler)(void);
-typedef void (*USBEnumerateHandler)(USBInterface* interface);
+*/
 
 #define OPENIBOOTCMD_DUMPBUFFER 0
 #define OPENIBOOTCMD_DUMPBUFFER_LEN 1
@@ -248,20 +277,41 @@ typedef struct OpenIBootCmd {
 #define USB_SYNCH_FRAME			12
 
 
+/*
+==================
+TODO: temporary stuff to make code compile! needs removal
+==================
+*/
 
+typedef void (*USBStartHandler)(void);
+typedef void (*USBEnumerateHandler)(USBInterface* interface);
+typedef void (*USBEndpointHandlerOld)(uint32_t token);
 
-
-
-int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart);
-int usb_start();
-int usb_shutdown();
-int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandler handler, uint32_t token);
+int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandlerOld handler, uint32_t token);
 void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType);
 void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
 void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen);
 void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen);
 void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
 USBSpeed usb_get_speed();
+
+/*
+==================
+end of temporary stuff
+==================
+*/
+
+int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart);
+int usb_start();
+int usb_shutdown();
+
+//int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandler handler, uint32_t token);
+//void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType);
+//void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
+//void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen);
+//void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen);
+//void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
+//USBSpeed usb_get_speed();
 
 USBDeviceDescriptor* usb_get_device_descriptor();
 USBDeviceQualifierDescriptor* usb_get_device_qualifier_descriptor();

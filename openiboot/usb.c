@@ -14,18 +14,27 @@ static void change_state(USBState new_state);
 static Boolean usb_inited = FALSE;
 
 static USBState usb_state;
-static uint8_t usb_speed;
-static uint8_t usb_max_packet_size;
+//static uint8_t usb_max_packet_size;
 static USBDirection endpoint_directions[USB_NUM_ENDPOINTS];
-static USBEndpointBidirHandlerInfo endpoint_handlers[USB_NUM_ENDPOINTS];
-static uint32_t inInterruptStatus[USB_NUM_ENDPOINTS];
-static uint32_t outInterruptStatus[USB_NUM_ENDPOINTS];
+static USBEndpointBidirTransferInfo endpointTransferInfos[USB_NUM_ENDPOINTS];
+//static uint32_t inInterruptStatus[USB_NUM_ENDPOINTS];
+//static uint32_t outInterruptStatus[USB_NUM_ENDPOINTS];
 
 USBEPRegisters* InEPRegs;
 USBEPRegisters* OutEPRegs;
 
-static uint8_t currentlySending;
+//static uint8_t currentlySending;		//probably not needed, used for not getting messed up by interrupts in the txFIFO stuff from before
 
+static uint8_t* controlSendBuffer = NULL;
+static uint8_t* controlRecvBuffer = NULL;
+
+//static RingBuffer* txQueue = NULL;
+
+static USBEnumerateHandler enumerateHandler;
+static USBStartHandler startHandler;
+
+
+// Descriptor/configuration functions and variables
 static USBDeviceDescriptor deviceDescriptor;
 static USBDeviceQualifierDescriptor deviceQualifierDescriptor;
 
@@ -34,14 +43,6 @@ static USBStringDescriptor** stringDescriptors;
 static USBFirstStringDescriptor* firstStringDescriptor;
 
 static USBConfiguration* configurations;
-
-static uint8_t* controlSendBuffer = NULL;
-static uint8_t* controlRecvBuffer = NULL;
-
-static RingBuffer* txQueue = NULL;
-
-static USBEnumerateHandler enumerateHandler;
-static USBStartHandler startHandler;
 
 static void usbIRQHandler(uint32_t token);
 static void processSetupPacket(void);
@@ -60,38 +61,86 @@ static void releaseConfigurations();
 
 static uint8_t addStringDescriptor(const char* descriptorString);
 static void releaseStringDescriptors();
-static uint16_t packetsizeFromSpeed(uint8_t speed_id);
 
-static void sendControl(void* buffer, int bufferLen);
-static void receiveControl(void* buffer, int bufferLen);
-
-static void receive(int endpoint, USBTransferType transferType, void* buffer, int packetLength, int bufferLen);
+// Transmitting and receiving
+//TODO: (-> new version) static void sendControl(void* buffer, int bufferLen);
 
 static int resetUSB();
-static void getEndpointInterruptStatuses();
-static void callEndpointHandlers();
 static uint32_t getConfigurationTree(int i, uint8_t speed_id, void* buffer);
 static void setConfiguration(int i);
 
-static void handleTxInterrupts(int endpoint);
-static void handleRxInterrupts(int endpoint);
+//static int advanceTxQueue();
 
-static int advanceTxQueue();
+//static RingBuffer* createRingBuffer(int size);
+//static int8_t ringBufferDequeue(RingBuffer* buffer);
+//static int8_t ringBufferEnqueue(RingBuffer* buffer, uint8_t value);
 
-static RingBuffer* createRingBuffer(int size);
-static int8_t ringBufferDequeue(RingBuffer* buffer);
-static int8_t ringBufferEnqueue(RingBuffer* buffer, uint8_t value);
+//TODO: New functions to be sorted
+static void sendInNak(void);
+static void disableEndpointIn(uint8_t endpoint);
+static void flushTxFifo(uint32_t txFifo);
+static void setStall(uint8_t endpoint, USBDirection direction, OnOff onoff);
+static void clearEndpointConfiguration(uint8_t endpoint, USBDirection direction);
+static void shutdownEndpoint(uint8_t endpoint, USBDirection direction);
+static void disableEndpoint(uint8_t endpoint, USBDirection direction);
+static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int packetSize, int token);
+static void send(uint8_t endpoint);
+static void receive(uint8_t endpoint);
+static void receiveControl(Boolean clearNAK);
+static void handleTransferCompleted(USBTransfer * transfer);
+static uint16_t getPacketSizeFromSpeed(void);
+static void setAddress(uint8_t address);
+static void handleEndpointInInterrupt(uint8_t endpoint);
+static void handleEndpointOutInterrupt(uint8_t endpoint);
+static void sendControl(void * buffer, int bufferLen);
+static void startTransfer(uint8_t endpoint, USBDirection direction, USBTransfer * transfer);
 
-//TODO: AAH GLOBAL VARIABLES BAD!!!!
-static uint8_t shouldClearEP0ControlNAK = FALSE;
+// Handlers
+static void handleControlSent(USBTransfer * transfer);
 
-static void usbTxRx(int endpoint, USBDirection direction, USBTransferType transferType, void* buffer, int bufferLen);
+//TODO: New variables
+static Boolean txFifosUsed[USB_NUM_TX_FIFOS];
+static uint32_t nextDptxfsizStartAddr;
+
+// Variables read from the usb hardware
+static uint32_t hwMaxPacketCount;
+static uint32_t hwMaxTransferSize;
+static Boolean hwDedicatedFifoEnabled;
+
+//static void usbTxRx(int endpoint, USBDirection direction, USBTransferType transferType, void* buffer, int bufferLen);
+
+/*
+==================
+TODO: temporary stuff to make code compile! needs removal
+==================
+*/
+
+int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandlerOld handler, uint32_t token) {return 0;}
+void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen) {}
+void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen) {}
+void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen) {}
+void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen) {}
+//int advanceTxQueue() {return 0;}
+
+/*
+==================
+end of temporary stuff
+==================
+*/
+
 
 int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
-//TODO: figure out where this goes/if needed
+	//TODO: REMOVE ME MAKE STUFF COMPILE
+	if (0) {
+		shutdownEndpoint(5, USBIn);
+		setupEndpoint(5, USBIn, USBControl, 64, 1);
+	}
+
+
+	//TODO: figure out where this goes/if needed
 	enumerateHandler = hEnumerate;
 	startHandler = hStart;
-	currentlySending = 0xFF;
+	//currentlySending = 0xFF;
 
 	int i;
 
@@ -104,16 +153,11 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 
 	change_state(USBStart);
 
-	if(txQueue == NULL)
-		txQueue = createRingBuffer(TX_QUEUE_LEN);
+	//TODO: I don't think that this is necessary anymore
+	//if(txQueue == NULL)
+	//	txQueue = createRingBuffer(TX_QUEUE_LEN);
 
 	initializeDescriptors();
-
-	if(controlSendBuffer == NULL)
-		controlSendBuffer = memalign(DMA_ALIGN, CONTROL_SEND_BUFFER_LEN);
-
-	if(controlRecvBuffer == NULL)
-		controlRecvBuffer = memalign(DMA_ALIGN, CONTROL_RECV_BUFFER_LEN);
 
 #ifndef CONFIG_IPOD2G
 	// Power on hardware
@@ -131,13 +175,12 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 
 	// power on PHY
 	SET_REG(USB_PHY + OPHYPWR, OPHYPWR_POWERON);
-	udelay(USB_PHYPWRPOWERON_DELAYUS);
-
 #ifdef CONFIG_IPOD2G
 	// reset unknown registers
 	SET_REG(USB_PHY + OPHYUNK1, OPHYUNK1_START);
 	SET_REG(USB_PHY + OPHYUNK2, OPHYUNK2_START);
 #endif
+	udelay(USB_PHYPWRPOWERON_DELAYUS);
 
 	// select clock
 #ifdef CONFIG_IPOD2G
@@ -156,8 +199,10 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 			phyClockBits = OPHYCLK_CLKSEL_OTHER;
 			break;
 	}
+
 	SET_REG(USB_PHY + OPHYCLK, (GET_REG(USB_PHY + OPHYCLK) & OPHYCLK_CLKSEL_MASK) | phyClockBits);
 #else
+	//TODO: get clock_get_frequency working for S5L8900
 	SET_REG(USB_PHY + OPHYCLK, (GET_REG(USB_PHY + OPHYCLK) & OPHYCLK_CLKSEL_MASK) | OPHYCLK_CLKSEL_48MHZ);
 #endif
 
@@ -183,9 +228,14 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 		bufferPrintf("EP %d: %d\r\n", i, endpoint_directions[i]);
 	}
 
-	memset(endpoint_handlers, 0, sizeof(endpoint_handlers));
+	if(controlSendBuffer == NULL)
+		controlSendBuffer = memalign(DMA_ALIGN, CONTROL_SEND_BUFFER_LEN);
 
-	//TODO: a few other structures are initialized here in iboot
+	if(controlRecvBuffer == NULL)
+		controlRecvBuffer = memalign(DMA_ALIGN, CONTROL_RECV_BUFFER_LEN);
+
+	memset(endpointTransferInfos, 0, sizeof(endpointTransferInfos));
+	memset(txFifosUsed, 0, sizeof(txFifosUsed));
 
 	interrupt_install(USB_INTERRUPT, usbIRQHandler, 0);
 
@@ -199,6 +249,16 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 }
 
 int usb_start(void) {
+	// check some hardware bits for the configuration that we are running on
+	if (GET_REG(USB_OTG + GHWCFG4) & GHWCFG4_DED_FIFO_EN) {
+		hwDedicatedFifoEnabled = TRUE;
+	} else {
+		hwDedicatedFifoEnabled = FALSE;
+	}
+
+	hwMaxPacketCount = ((1 << (GET_BITS(USB_OTG + GHWCFG3, 4, 3) + 4))-1);
+	hwMaxTransferSize = ((1 << (GET_BITS(USB_OTG + GHWCFG3, 0, 4) + 0xB))-1);
+
 	// generate a usb core reset
 	SET_REG(USB_OTG + GRSTCTL, GRSTCTL_CORESOFTRESET);
 
@@ -206,16 +266,16 @@ int usb_start(void) {
 	while((GET_REG(USB_OTG + GRSTCTL) & GRSTCTL_CORESOFTRESET) == GRSTCTL_CORESOFTRESET);
 
 	// wait until reset completes
-	while(!(GET_REG(USB_OTG + GRSTCTL) & GRSTCTL_AHBIDLE));
+	while((GET_REG(USB_OTG + GRSTCTL) & GRSTCTL_AHBIDLE) != GRSTCTL_AHBIDLE);
 
 	SET_REG(USB_OTG + GAHBCFG, GAHBCFG_DMAEN | GAHBCFG_BSTLEN_INCR8 | GAHBCFG_MASKINT);
 	SET_REG(USB_OTG + GUSBCFG, GUSBCFG_PHYIF16BIT | ((GUSBCFG_TURNAROUND & GUSBCFG_TURNAROUND_MASK) << GUSBCFG_TURNAROUND_SHIFT));
 
-#ifdef CONFIG_IPOD2G	
-	SET_REG(USB_OTG + DCFG, DCFG_HISPEED | DCFG_NZSTSOUTHSHK);
-#else
-	SET_REG(USB_OTG + DCFG, DCFG_HISPEED | DCFG_NZSTSOUTHSHK | DCFG_EPMSCNT);
-#endif
+	if (hwDedicatedFifoEnabled) {
+		SET_REG(USB_OTG + DCFG, DCFG_HISPEED | DCFG_NZSTSOUTHSHK);
+	} else {
+		SET_REG(USB_OTG + DCFG, DCFG_HISPEED | DCFG_NZSTSOUTHSHK | DCFG_EPMSCNT);
+	}
 
 	// disable all interrupts until endpoint descriptors and configuration structures have been setup
 	SET_REG(USB_OTG + DOEPMSK, USB_EPINT_NONE);
@@ -232,130 +292,25 @@ int usb_start(void) {
 			| USB_EPINT_XferCompl;
 	}
 	
-	// Bus reset
+	// enable the first interrupts that we will respond to
 	SET_REG(USB_OTG + GINTMSK, GINTMSK_RESET | GINTMSK_ENUMDONE);
 
-
-
-
-
-
-
-
-
-
-/*
-	// Not done in iBoot 3.1.3 anymore
-
-	// Generate a soft disconnect on host
-	SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_SFTDISCONNECT);
-	udelay(USB_SFTDISCONNECT_DELAYUS);
-
-	udelay(USB_RESETWAITFINISH_DELAYUS);
-
-	// allow host to reconnect
-	SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) & (~DCTL_SFTDISCONNECT));
-	udelay(USB_SFTCONNECT_DELAYUS);
-*/
-
-/*
-	// This was never really actually done (supposed to be on EP 5 to 7 I think. DELETE!
-
-	// flag all interrupts as positive, maybe to disable them
-
-	// Set 7th EP? This is what iBoot does
-	InEPRegs[USB_NUM_ENDPOINTS].interrupt = USB_EPINT_INEPNakEff | USB_EPINT_INTknEPMis | USB_EPINT_INTknTXFEmp
-		| USB_EPINT_TimeOUT | USB_EPINT_AHBErr | USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
-	OutEPRegs[USB_NUM_ENDPOINTS].interrupt = USB_EPINT_OUTTknEPDis
-		| USB_EPINT_SetUp | USB_EPINT_AHBErr | USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
-
-	for(i = 0; i < USB_NUM_ENDPOINTS; i++) {
-		InEPRegs[i].interrupt = USB_EPINT_INEPNakEff | USB_EPINT_INTknEPMis | USB_EPINT_INTknTXFEmp
-			| USB_EPINT_TimeOUT | USB_EPINT_AHBErr | USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
-		OutEPRegs[i].interrupt = USB_EPINT_OUTTknEPDis
-			| USB_EPINT_SetUp | USB_EPINT_AHBErr | USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
-	}
-*/
-
-
-
-
-/*
-	// Gets done when we just write a value to DCFG above without actually worrying about previous value
-	SET_REG(USB_OTG + DCFG, GET_REG(USB_OTG + DCFG) & ~(DCFG_DEVICEADDRMSK));
-*/
-
-/*
-	// I think this got merged into usb_irq_handler magically...
-
-	InEPRegs[0].control = USB_EPCON_ACTIVE;
-	OutEPRegs[0].control = USB_EPCON_ACTIVE;
-*/
-
-
-/*
-	// done in usb_irq_handler now???? WHAAAAT???
-	// values are different too
-	SET_REG(USB_OTG + GRXFSIZ, RX_FIFO_DEPTH);
-	SET_REG(USB_OTG + GNPTXFSIZ, (TX_FIFO_DEPTH << GNPTXFSIZ_DEPTH_SHIFT) | TX_FIFO_STARTADDR);
-*/
-
-/*
-	// jank
-
-	int i;
-	for(i = 0; i < USB_NUM_ENDPOINTS; i++) {
-		InEPRegs[i].interrupt = USB_EPINT_INEPNakEff | USB_EPINT_INTknEPMis | USB_EPINT_INTknTXFEmp
-			| USB_EPINT_TimeOUT | USB_EPINT_AHBErr | USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
-		OutEPRegs[i].interrupt = USB_EPINT_OUTTknEPDis
-			| USB_EPINT_SetUp | USB_EPINT_AHBErr | USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
-		
-	}
-*/
-
-/*
-	// Done in usb_irq_handler now...
-	SET_REG(USB_OTG + GINTMSK, GINTMSK_OTG | GINTMSK_SUSPEND | GINTMSK_RESET | GINTMSK_INEP | GINTMSK_OEP | GINTMSK_DISCONNECT);
-
-	SET_REG(USB_OTG + DOEPMSK, USB_EPINT_XferCompl | USB_EPINT_SetUp | USB_EPINT_Back2BackSetup);
-	SET_REG(USB_OTG + DIEPMSK, USB_EPINT_XferCompl | USB_EPINT_AHBErr | USB_EPINT_TimeOUT);
-*/
-
-/*
-	// Not sure if this is done at all. might be incorporated into the endpoint setup function
-	InEPRegs[0].interrupt = USB_EPINT_ALL;
-	OutEPRegs[0].interrupt = USB_EPINT_ALL;
-*/
-
-/*
-	// Doesn't look like this is done at all.
-	SET_REG(USB_OTG + DCTL, DCTL_PROGRAMDONE + DCTL_CGOUTNAK + DCTL_CGNPINNAK);
-	udelay(USB_PROGRAMDONE_DELAYUS);
-	SET_REG(USB_OTG + GOTGCTL, GET_REG(USB_OTG + GOTGCTL) | GOTGCTL_SESSIONREQUEST);
-*/
-
-/*
-	Prob incorporated into the whole usb_irq_handler thing
-	receiveControl(controlRecvBuffer, sizeof(USBSetupPacket));
-*/
+	//TODO: usb_unkn_2/8/12/15/... stuff (set up some weird periodic function)
+	//		-> seems to not even actually run in iboot so probably can be omitted.
 
 	change_state(USBPowered);
 
 	return 0;
 }
 
-static void receiveControl(void* buffer, int bufferLen) {
-	CleanAndInvalidateCPUDataCache();
-	receive(USB_CONTROLEP, USBControl, buffer, USB_MAX_PACKETSIZE, bufferLen);
-}
-
+/*
 static void usbTxRx(int endpoint, USBDirection direction, USBTransferType transferType, void* buffer, int bufferLen) {
 	int packetLength;
 
 	if(transferType == USBControl || transferType == USBInterrupt) {
 		packetLength = USB_MAX_PACKETSIZE;
 	} else {
-		packetLength = packetsizeFromSpeed(usb_speed);
+		packetLength = getPacketsizeFromSpeed();
 	}
 
 	CleanAndInvalidateCPUDataCache();
@@ -394,71 +349,23 @@ static void usbTxRx(int endpoint, USBDirection direction, USBTransferType transf
 	InEPRegs[endpoint].control = USB_EPCON_CLEARNAK | USB_EPCON_ACTIVE | ((transferType & USB_EPCON_TYPE_MASK) << USB_EPCON_TYPE_SHIFT) | (packetLength & USB_EPCON_MPS_MASK);
 	
 }
-
-static void receive(int endpoint, USBTransferType transferType, void* buffer, int packetLength, int bufferLen) {
-	if(endpoint == USB_CONTROLEP) {
-		OutEPRegs[endpoint].transferSize = ((USB_SETUP_PACKETS_AT_A_TIME & DOEPTSIZ0_SUPCNT_MASK) << DOEPTSIZ0_SUPCNT_SHIFT)
-			| ((USB_SETUP_PACKETS_AT_A_TIME & DOEPTSIZ0_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT) | (bufferLen & DEPTSIZ0_XFERSIZ_MASK);
-	} else {
-		//TODO: verify this. control stuff above and outside of else below is all good
-
-
-		// divide our buffer into packets. Apple uses fancy bitwise arithmetic while we call huge libgcc integer arithmetic functions
-		// for the sake of code readability. Will this matter?
-		int packetCount = bufferLen / packetLength;
-		if((bufferLen % packetLength) != 0)
-			++packetCount;
-
-		OutEPRegs[endpoint].transferSize = ((packetCount & DEPTSIZ_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT) | (bufferLen & DEPTSIZ_XFERSIZ_MASK);
-	}
-
-/*
-	// I think this is done when enabling EPs now.	
-	SET_REG(USB_OTG + DAINTMSK, GET_REG(USB_OTG + DAINTMSK) | (1 << (DAINTMSK_OUT_SHIFT + endpoint)));
 */
-
-	OutEPRegs[endpoint].dmaAddress = buffer;
-
-/*
-	//TODO: figure this out for non-receiveControl. The type mask might still be needed, but packetLength is not used for receiveControl anymore.
-	//		USB_EPCON_ACTIVE is dead too.
-	// start the transfer
-	OutEPRegs[endpoint].control = USB_EPCON_ENABLE | USB_EPCON_CLEARNAK | USB_EPCON_ACTIVE
-		| ((transferType & USB_EPCON_TYPE_MASK) << USB_EPCON_TYPE_SHIFT) | (packetLength & USB_EPCON_MPS_MASK);
-*/
-	// start the transfer
-	//TODO: clearnak isn't always desired! see disassembly + refs to dword_FF26678
-	if (shouldClearEP0ControlNAK && (endpoint == USB_CONTROLEP)) {
-		OutEPRegs[endpoint].control = USB_EPCON_ENABLE | USB_EPCON_CLEARNAK;
-	} else {
-		OutEPRegs[endpoint].control = USB_EPCON_ENABLE;
-	}
-}
 
 static int resetUSB() {
-#ifdef CONFIG_IPOD2G
-	//TODO: make a new function called usb_ep_in_nak with all of this?
-	//		it is called from somewhere else too maybe (usb_handle_endpoint_in)
-	if (!(OutEPRegs[USB_CONTROLEP].control)) {
-		SET_REG(USB_OTG + GINTSTS, GINTMSK_INNAK);
-		SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_SGNPINNAK);
-		while ((GET_REG(USB_OTG + GINTSTS) & GINTMSK_INNAK) != GINTMSK_INNAK);
-		SET_REG(USB_OTG + GINTSTS, GINTMSK_INNAK);
+	disableEndpoint(USB_CONTROLEP, USBIn);
+	setAddress(DCFG_DEVICEADDR_RESET);
 
-		InEPRegs[USB_CONTROLEP].control |= USB_EPCON_SETNAK;
-		while ((InEPRegs[USB_CONTROLEP].interrupt & USB_EPINT_INEPNakEff) != USB_EPINT_INEPNakEff);
+	//TODO: some vendor/class setup stuff - probably isn't needed
+	//TODO: some communication struct stuff -> could be important
 
-		InEPRegs[USB_CONTROLEP].control |= USB_EPCON_SETNAK | USB_EPCON_DISABLE;
-		while ((InEPRegs[USB_CONTROLEP].interrupt & USB_EPINT_EPDisbld) != USB_EPINT_EPDisbld);
-
-		InEPRegs[USB_CONTROLEP].interrupt = InEPRegs[USB_CONTROLEP].interrupt;
-		
-		//TODO: some memory stuff here
-
-		SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_CGNPINNAK);
+	if (hwDedicatedFifoEnabled) {
+		nextDptxfsizStartAddr = DPTXFSIZ_BASE_STARTADDR;
+		memset(txFifosUsed, 0, sizeof(txFifosUsed));
+	} else {
+		//TODO: S5L8900 stuff
 	}
 
-	SET_REG(USB_OTG + DCFG, GET_REG(USB_OTG + DCFG) & ~DCFG_DEVICEADDRMSK);
+	memset(endpointTransferInfos, 0, sizeof(endpointTransferInfos));
 
 	SET_REG(USB_OTG + DOEPMSK, USB_EPINT_NONE);
 	SET_REG(USB_OTG + DIEPMSK, USB_EPINT_NONE);
@@ -466,7 +373,7 @@ static int resetUSB() {
 	SET_REG(USB_OTG + DAINTMSK, DAINTMSK_NONE);
 
 	// set up endpoints
-	int i;	
+	int i;
 	for(i = 0; i < USB_NUM_ENDPOINTS; i++) {
 		InEPRegs[i].interrupt = USB_EPINT_INTknTXFEmp | USB_EPINT_TimeOUT | USB_EPINT_AHBErr
 			| USB_EPINT_EPDisbld | USB_EPINT_XferCompl;
@@ -474,14 +381,18 @@ static int resetUSB() {
 			| USB_EPINT_XferCompl;
 	}
 
-	SET_REG(USB_OTG + GRXFSIZ, RX_FIFO_DEPTH);
-	SET_REG(USB_OTG + GNPTXFSIZ, TX_FIFO_DEPTH | TX_FIFO_UNKN1);
+	SET_REG(USB_OTG + GRXFSIZ, GRXFSIZ_DEPTH);
+	SET_REG(USB_OTG + GNPTXFSIZ, GNPTXFSIZ_STARTADDR | (GNPTXFSIZ_DEPTH << FIFO_DEPTH_SHIFT));
 
-	InEPRegs[USB_CONTROLEP].control = USB_EPINT_NONE;
-	OutEPRegs[USB_CONTROLEP].interrupt = USB_EPINT_NONE;
+	endpointTransferInfos[USB_CONTROLEP].out.packetSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
+	endpointTransferInfos[USB_CONTROLEP].in.packetSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
 
-	SET_REG(USB_OTG + GINTMSK, GINTMSK_SUSPEND | GINTMSK_RESUME | GINTMSK_EPMIS | GINTMSK_INEP | GINTMSK_OEP);
+	InEPRegs[USB_CONTROLEP].control = USB_EPCON_NONE;
+	OutEPRegs[USB_CONTROLEP].control = USB_EPCON_NONE;
 
+	// enable the interrupts that we will be handling
+	SET_REG(USB_OTG + GINTMSK, GET_REG(USB_OTG + GINTMSK) | GINTMSK_SUSPEND
+		| GINTMSK_RESUME | GINTMSK_EPMIS | GINTMSK_INEP | GINTMSK_OEP);
 	SET_REG(USB_OTG + DOEPMSK, USB_EPINT_SetUp | USB_EPINT_AHBErr | USB_EPINT_XferCompl);
 	SET_REG(USB_OTG + DIEPMSK, USB_EPINT_TimeOUT | USB_EPINT_AHBErr | USB_EPINT_XferCompl);
 
@@ -490,188 +401,94 @@ static int resetUSB() {
 		| ((1 << USB_CONTROLEP) << DAINTMSK_OUT_SHIFT)
 		| ((1 << USB_CONTROLEP) << DAINTMSK_IN_SHIFT));
 
-	receiveControl(controlRecvBuffer, sizeof(USBSetupPacket));
+	//TODO: should this always be FALSE?
+	receiveControl(FALSE);
 
-#else
-	//TODO: Update to new code. Should be mostly same as the stuff above.
-	//		This is old code from before
-	SET_REG(USB_OTG + DCFG, GET_REG(USB_OTG + DCFG) & ~DCFG_DEVICEADDRMSK);
-
-	int endpoint;
-	for(endpoint = 0; endpoint < USB_NUM_ENDPOINTS; endpoint++) {
-		OutEPRegs[endpoint].control = OutEPRegs[endpoint].control | USB_EPCON_SETNAK;
-	}
-
-	// enable interrupts for endpoint 0
-	SET_REG(USB_OTG + DAINTMSK, GET_REG(USB_OTG + DAINTMSK) | ((1 << USB_CONTROLEP) << DAINTMSK_OUT_SHIFT) | ((1 << USB_CONTROLEP) << DAINTMSK_IN_SHIFT));
-
-	SET_REG(USB_OTG + DOEPMSK, USB_EPINT_XferCompl | USB_EPINT_SetUp | USB_EPINT_Back2BackSetup);
-	SET_REG(USB_OTG + DIEPMSK, USB_EPINT_XferCompl | USB_EPINT_AHBErr | USB_EPINT_TimeOUT);
-
-	receiveControl(controlRecvBuffer, sizeof(USBSetupPacket));
-#endif
 	return 0;
 }
 
-static void getEndpointInterruptStatuses() {
-	// To not mess up the interrupt controller, we can only read the interrupt status once per interrupt, so we need to cache them here
-	int endpoint;
-	for(endpoint = 0; endpoint < USB_NUM_ENDPOINTS; endpoint++) {
-		if(endpoint_directions[endpoint] == USBIn || endpoint_directions[endpoint] == USBBiDir) {
-			inInterruptStatus[endpoint] = InEPRegs[endpoint].interrupt;
+static void sendControl(void * buffer, int bufferLen) {
+	if (bufferLen > 20) {
+		Reboot();
+	}
+	USBTransfer * transfer = malloc(sizeof(USBTransfer));
+	if (transfer == NULL) {
+		setStall(USB_CONTROLEP, USBIn, TRUE);
+	} else {
+		if (buffer != NULL && buffer != controlSendBuffer) {
+			// controlSendBuffer is used for all data transfers on ep 0 in
+			memcpy(controlSendBuffer, buffer, bufferLen);
 		}
-		if(endpoint_directions[endpoint] == USBOut || endpoint_directions[endpoint] == USBBiDir) {
-			outInterruptStatus[endpoint] = OutEPRegs[endpoint].interrupt;
-		}
+		transfer->buffer = controlSendBuffer;
+		transfer->bufferEndOffset = bufferLen;
+		transfer->handler = handleControlSent;
+		startTransfer(USB_CONTROLEP, USBIn, transfer);
 	}
 }
 
-static void callEndpointHandlers() {
-	uint32_t status = GET_REG(USB_OTG + DAINTMSK);
+static void handleControlSent(USBTransfer * transfer) {
+	// handler for control messages on endpoint 0 in
+	//TODO: a bunch of stuff that doesn't seem necessary, mainly
+	//		sendControl(NULL, 0) is some situations
+}
 
-	int endpoint;
-	for(endpoint = 0; endpoint < USB_NUM_ENDPOINTS; endpoint++) {
-		if((status & ((1 << endpoint) << DAINTMSK_OUT_SHIFT)) == ((1 << endpoint) << DAINTMSK_OUT_SHIFT)) {
-			if((outInterruptStatus[endpoint] & USB_EPINT_XferCompl) == USB_EPINT_XferCompl) {
-				if(endpoint_handlers[endpoint].out.handler != NULL) {
-					endpoint_handlers[endpoint].out.handler(endpoint_handlers[endpoint].out.token);
-				}
-			}
-		}
+static void startTransfer(uint8_t endpoint, USBDirection direction, USBTransfer * transfer) {
+	transfer->bufferStartOffset = 0;
+	transfer->status = USBTransferInProgress;
+	transfer->next = NULL;
 
-		if((status & ((1 << endpoint) << DAINTMSK_IN_SHIFT)) == ((1 << endpoint) << DAINTMSK_IN_SHIFT)) {
-			if((inInterruptStatus[endpoint] & USB_EPINT_XferCompl) == USB_EPINT_XferCompl) {
-				if(endpoint_handlers[endpoint].in.handler != NULL) {
-					endpoint_handlers[endpoint].in.handler(endpoint_handlers[endpoint].in.token);
-				}
-			}
-		}
+	USBEndpointTransferInfo * endpointInfo;
+	if (direction == USBIn) {
+		endpointInfo = &(endpointTransferInfos[endpoint].in);
+	} else {
+		endpointInfo = &(endpointTransferInfos[endpoint].out);
+	}
 
-		if(endpoint_directions[endpoint] == USBOut || endpoint_directions[endpoint] == USBBiDir) {
-			handleRxInterrupts(endpoint);
+	if (endpointInfo->currentTransfer == NULL) {
+		// no other transfers in queue
+		endpointInfo->currentTransfer = transfer;
+		endpointInfo->lastTransfer = transfer;
+		if (direction == USBIn) {
+			send(endpoint);
+		} else {
+			receive(endpoint);
 		}
-
-		if(endpoint_directions[endpoint] == USBIn || endpoint_directions[endpoint] == USBBiDir) {
-			handleTxInterrupts(endpoint);
-		}
+	} else {
+		// add our transfer to the back of the queue
+		endpointInfo->lastTransfer->next = transfer;
+		endpointInfo->lastTransfer = transfer;
 	}
 }
 
-static void handleTxInterrupts(int endpoint) {
-	if(!inInterruptStatus[endpoint]) {
-		return;
-	}
-
-	//uartPrintf("\tendpoint %d has an TX interrupt\r\n", endpoint);
-
-	// clear pending interrupts
-	if((inInterruptStatus[endpoint] & USB_EPINT_INEPNakEff) == USB_EPINT_INEPNakEff) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_INEPNakEff;
-		//uartPrintf("\t\tUSB_EPINT_INEPNakEff\r\n");
-	}
-
-	if((inInterruptStatus[endpoint] & USB_EPINT_INTknEPMis) == USB_EPINT_INTknEPMis) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_INTknEPMis;
-		//uartPrintf("\t\tUSB_EPINT_INTknEPMis\r\n");
-
-		// clear the corresponding core interrupt
-		SET_REG(USB_OTG + GINTSTS, GET_REG(USB_OTG + GINTSTS) | GINTMSK_EPMIS);
-	}
-
-	if((inInterruptStatus[endpoint] & USB_EPINT_INTknTXFEmp) == USB_EPINT_INTknTXFEmp) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_INTknTXFEmp;
-		//uartPrintf("\t\tUSB_EPINT_INTknTXFEmp\r\n");
-	}
-
-	if((inInterruptStatus[endpoint] & USB_EPINT_TimeOUT) == USB_EPINT_TimeOUT) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_TimeOUT;
-		//uartPrintf("\t\tUSB_EPINT_TimeOUT\r\n");
-		currentlySending = 0xFF;
-		//ringBufferDequeue(txQueue);
-	}
-
-	if((inInterruptStatus[endpoint] & USB_EPINT_AHBErr) == USB_EPINT_AHBErr) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_AHBErr;
-		//uartPrintf("\t\tUSB_EPINT_AHBErr\r\n");
-	}
-
-	if((inInterruptStatus[endpoint] & USB_EPINT_EPDisbld) == USB_EPINT_EPDisbld) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_EPDisbld;
-		//uartPrintf("\t\tUSB_EPINT_EPDisbldr\n");
-	}
-
-	if((inInterruptStatus[endpoint] & USB_EPINT_XferCompl) == USB_EPINT_XferCompl) {
-		InEPRegs[endpoint].interrupt = USB_EPINT_XferCompl;
-		//uartPrintf("\t\tUSB_EPINT_XferCompl\n");
-		currentlySending = 0xFF;
-		advanceTxQueue();
-	}
-	
-}
-
-static void handleRxInterrupts(int endpoint) {
-	if(!outInterruptStatus[endpoint]) {
-		return;
-	}
-
-	//uartPrintf("\tendpoint %d has an RX interrupt\r\n", endpoint);
-		
-	if((outInterruptStatus[endpoint] & USB_EPINT_Back2BackSetup) == USB_EPINT_Back2BackSetup) {
-		OutEPRegs[endpoint].interrupt = USB_EPINT_Back2BackSetup;
-	}
-
-	if((outInterruptStatus[endpoint] & USB_EPINT_OUTTknEPDis) == USB_EPINT_OUTTknEPDis) {
-		OutEPRegs[endpoint].interrupt = USB_EPINT_OUTTknEPDis;
-	}
-
-	if((outInterruptStatus[endpoint] & USB_EPINT_AHBErr) == USB_EPINT_AHBErr) {
-		OutEPRegs[endpoint].interrupt = USB_EPINT_AHBErr;
-	}
-
-	if((outInterruptStatus[endpoint] & USB_EPINT_EPDisbld) == USB_EPINT_EPDisbld) {
-		OutEPRegs[endpoint].interrupt = USB_EPINT_EPDisbld;
-	}
-
-	if((outInterruptStatus[endpoint] & USB_EPINT_XferCompl) == USB_EPINT_XferCompl) {
-		OutEPRegs[endpoint].interrupt = USB_EPINT_XferCompl;
-		if(endpoint == 0) {
-			receiveControl(controlRecvBuffer, sizeof(USBSetupPacket));
-		}
-	}
-}
-
-static void sendControl(void* buffer, int bufferLen) {
-	usbTxRx(USB_CONTROLEP, USBIn, USBControl, buffer, bufferLen);
-	ringBufferEnqueue(txQueue, USB_CONTROLEP);
-	advanceTxQueue();
-}
-
-static void stallControl(void) {
-	InEPRegs[USB_CONTROLEP].control = USB_EPCON_STALL;
-}
-
+/*
 void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen) {
 	usbTxRx(endpoint, USBIn, USBBulk, buffer, bufferLen);
 	ringBufferEnqueue(txQueue, endpoint);
 	advanceTxQueue();
 }
+*/
 
+/*
 void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen) {
 	usbTxRx(endpoint, USBIn, USBInterrupt, buffer, bufferLen);
 	ringBufferEnqueue(txQueue, endpoint);
 	advanceTxQueue();
 }
+*/
 
-
+/*
 void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen) {
 	usbTxRx(endpoint, USBOut, USBBulk, buffer, bufferLen);
 }
+*/
 
+/*
 void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen) {
 	usbTxRx(endpoint, USBOut, USBInterrupt, buffer, bufferLen);
 }
+*/
 
-
+/*
 static int advanceTxQueue() {
 	EnterCriticalSection();
 	if(currentlySending != 0xFF) {
@@ -688,12 +505,12 @@ static int advanceTxQueue() {
 	currentlySending = nextEP;
 	LeaveCriticalSection();
 
-	/*int endpoint;
+	/-*int endpoint;
 	for(endpoint = 0; endpoint < USB_NUM_ENDPOINTS; endpoint++) {
 		if(endpoint_directions[endpoint] == USBIn || endpoint_directions[endpoint] == USBBiDir) {
 			InEPRegs[endpoint].control = (InEPRegs[endpoint].control & ~(DCTL_NEXTEP_MASK << DCTL_NEXTEP_SHIFT)) | ((nextEP & DCTL_NEXTEP_MASK) << DCTL_NEXTEP_SHIFT);
 		}
-	}*/
+	}*-/
 
 	InEPRegs[0].control = (InEPRegs[0].control & ~(DCTL_NEXTEP_MASK << DCTL_NEXTEP_SHIFT)) | ((nextEP & DCTL_NEXTEP_MASK) << DCTL_NEXTEP_SHIFT);
 	InEPRegs[1].control = (InEPRegs[1].control & ~(DCTL_NEXTEP_MASK << DCTL_NEXTEP_SHIFT)) | ((nextEP & DCTL_NEXTEP_MASK) << DCTL_NEXTEP_SHIFT);
@@ -709,15 +526,24 @@ static int advanceTxQueue() {
 
 	return 0;
 }
+*/
 
 static void usbIRQHandler(uint32_t token) {
+	//DEBUG
+/*	static int count = 0;
+	count++;
+	if(count >= 2) {
+		//return;
+	}
+//*/
+
 	// get and acknowledge all interrupts
 	uint32_t status = GET_REG(USB_OTG + GINTSTS);
 	SET_REG(USB_OTG + GINTSTS, status);
 
 	//uartPrintf("<begin interrupt: %x>\r\n", status);
 
-	if((status & GINTMSK_OTG) == GINTMSK_OTG) {
+	if (status & GINTMSK_OTG) {
 		uint32_t otg_interrupt_status = GET_REG(USB_OTG + GOTGINT);
 		if ((otg_interrupt_status & GINTMSK_OTG) == GINTMSK_OTG) {
 			SET_REG(USB_OTG + GOTGINT, otg_interrupt_status);
@@ -726,12 +552,12 @@ static void usbIRQHandler(uint32_t token) {
 		}
 	}
 
-	if ((status & GINTMSK_RESET) == GINTMSK_RESET) {
+	if (status & GINTMSK_RESET) {
 		if(usb_state < USBError) {
 			bufferPrintf("usb: reset detected\r\n");
 			change_state(USBPowered);
 		}
-
+		
 		int retval = resetUSB();
 
 		if(retval) {
@@ -740,57 +566,66 @@ static void usbIRQHandler(uint32_t token) {
 		}
 	}
 
-	if ((status & GINTMSK_ENUMDONE) == GINTMSK_ENUMDONE) {
+	if (status & GINTMSK_ENUMDONE) {
 		// iboot reads this for some reason
 		GET_REG(USB_OTG + DSTS);
 
-		//TODO: mess with a bunch of data structures
+		//TODO: some descriptor stuff(?) based on the speed. not sure whether this is necessary
 	}
 
-	if(((status & GINTMSK_INEP) == GINTMSK_INEP) || ((status & GINTMSK_OEP) == GINTMSK_OEP)) {
+	if ((status & GINTMSK_INEP) || (status & GINTMSK_OEP)) {
 		uint32_t daint_status = GET_REG(USB_OTG + DAINT);
 		if (daint_status != DAINT_NONE) {
 			// aha, got something on one of the endpoints. Now the real fun begins
 			
-			// first, let's get the interrupt status of individual endpoints
-			getEndpointInterruptStatuses();
-
+			// control endpoint in
 			if (daint_status & ((1 << USB_CONTROLEP) << DAINTMSK_IN_SHIFT)) {
-				callEndpointHandlers();
-				//TODO: usb_handle_endpoint_in(IN, 0);
+				handleEndpointInInterrupt(USB_CONTROLEP);
 			}
-		
+			
+			// control endpoint out
 			if (daint_status & ((1 << USB_CONTROLEP) << DAINTMSK_OUT_SHIFT)) {
-				// clear the interrupt
 				uint32_t control_ep_out_status = OutEPRegs[USB_CONTROLEP].interrupt;
 				OutEPRegs[USB_CONTROLEP].interrupt = control_ep_out_status;
 				udelay(USB_INTERRUPT_CLEAR_DELAYUS);
 
-				if ((control_ep_out_status & USB_EPINT_SetUp) == USB_EPINT_SetUp) {
+				if (control_ep_out_status & USB_EPINT_SetUp) {
+					// received a setup packet					
 					processSetupPacket();
-					shouldClearEP0ControlNAK = FALSE;
+
+					// get the next SETUP packet
+					receiveControl(USB_CONTROLEP);
 				} else {
-					shouldClearEP0ControlNAK = TRUE;
-				/*
-					//TODO: figure out if this transferSize stuff is needed			
 					uint32_t transferSize;
 					if (control_ep_out_status & USB_EPINT_XferCompl) {
-						transferSize = USB_MAX_PACKETSIZE - (InEPRegs[USB_CONTROLEP].transferSize & DEPTSIZ0_XFERSIZ_MASK);
-						InEPRegs[USB_CONTROLEP].transferSize = 0;
-					} else if (control_ep_out_status & USB_EPINT_SetUp) {
-						transferSize = 8;
+						transferSize = USB_CONTROLEP_MAX_TRANSFER_SIZE - (OutEPRegs[USB_CONTROLEP].transferSize
+							& DEPTSIZ0_XFERSIZ_MASK);
+						OutEPRegs[USB_CONTROLEP].transferSize = 0;
 					} else {
 						transferSize = 0;
 					}
-				*/
+
+					//TODO: some processing for non-setup packets on EP 0 (at the start of usb_process_ep_0_out_interrupt)			
+
+					receiveControl(TRUE);
 				}
 			}
-	
-			if (daint_status & (!(((1 << USB_CONTROLEP) << DAINTMSK_IN_SHIFT) | ((1 << USB_CONTROLEP) << DAINTMSK_OUT_SHIFT)))) {
-				// A non-control EP has an interrupt registered
-				callEndpointHandlers();
+			
+			// check for interrupts on the non-control endpoints
+			int endpoint;
+			for (endpoint = 1; endpoint < USB_NUM_ENDPOINTS; endpoint++) {
+				if (daint_status & ((1 << endpoint) << DAINTMSK_IN_SHIFT)) {
+					handleEndpointInInterrupt(endpoint);
+				}
+				if (daint_status & ((1 << endpoint) << DAINTMSK_OUT_SHIFT)) {
+					handleEndpointOutInterrupt(endpoint);
+				}
 			}
 		}
+	}
+
+	if (status & GINTMSK_EPMIS) {
+		//TODO: handle EPMIS interrupt
 	}
 
 	//uartPrintf("<end interrupt>\r\n");
@@ -805,8 +640,22 @@ static void processSetupPacket(void) {
 	USBStringDescriptor* strDesc;
 	uint32_t requestType = USBSetupPacketRequestTypeType(setupPacket->bmRequestType);
 	switch(requestType) {
+		case USBSetupPacketClass:
+			//TODO: probably isn't needed
+			break;
+		case USBSetupPacketVendor:
+			//TODO: probably isn't needed
+			break;
 		case USBSetupPacketStandard:
 			switch(setupPacket->bRequest) {
+				case USB_CLEAR_FEATURE:
+					//TODO
+					break;
+
+				case USB_GET_CONFIGURATION:					
+					//TODO
+					break;
+
 				case USB_GET_DESCRIPTOR:
 					length = setupPacket->wLength;
 					// descriptor type is high, descriptor index is low
@@ -820,7 +669,7 @@ static void processSetupPacket(void) {
 							break;
 						case USBConfigurationDescriptorType:
 							// hopefully SET_ADDRESS was received beforehand to set the speed
-							totalLength = getConfigurationTree(setupPacket->wValue & 0xFF, usb_speed, controlSendBuffer);
+							totalLength = getConfigurationTree(setupPacket->wValue & 0xFF, DSTS_GET_SPEED(GET_REG(USB_OTG + DSTS)), controlSendBuffer);
 							if(length > totalLength)
 								length = totalLength;
 							break;
@@ -843,16 +692,29 @@ static void processSetupPacket(void) {
 
 					if(usb_state < USBError) {
 						if(stall)
-							stallControl();
+							setStall(USB_CONTROLEP, USBIn, TRUE);
 						else
 							sendControl(controlSendBuffer, length);
 					}
 
 					break;
 
+				case USB_GET_INTERFACE:
+					//TODO
+					break;
+
+				case USB_GET_STATUS:
+					//TODO: needs update...
+					// FIXME: iBoot doesn't really care about this status
+					*((uint16_t*) controlSendBuffer) = 0;
+					sendControl(controlSendBuffer, sizeof(uint16_t));
+					break;
+
+				case USB_SET_FEATURE:
+					//TODO
+					break;
+
 				case USB_SET_ADDRESS:
-					usb_speed = DSTS_GET_SPEED(GET_REG(USB_OTG + DSTS));
-					usb_max_packet_size = packetsizeFromSpeed(usb_speed);
 					SET_REG(USB_OTG + DCFG, (GET_REG(USB_OTG + DCFG) & ~DCFG_DEVICEADDRMSK)
 						| ((setupPacket->wValue & DCFG_DEVICEADDR_UNSHIFTED_MASK) << DCFG_DEVICEADDR_SHIFT));
 
@@ -862,21 +724,6 @@ static void processSetupPacket(void) {
 					if(usb_state < USBError) {
 						change_state(USBAddress);
 					}
-					break;
-
-				case USB_SET_INTERFACE:
-					// send an acknowledgement
-					sendControl(controlSendBuffer, 0);
-					break;
-
-				case USB_GET_STATUS:
-					// FIXME: iBoot doesn't really care about this status
-					*((uint16_t*) controlSendBuffer) = 0;
-					sendControl(controlSendBuffer, sizeof(uint16_t));
-					break;
-
-				case USB_GET_CONFIGURATION:
-					// FIXME: iBoot just puts out a debug message on console for this request.
 					break;
 
 				case USB_SET_CONFIGURATION:
@@ -889,28 +736,32 @@ static void processSetupPacket(void) {
 						startHandler();
 					}
 					break;
+
+				case USB_SET_INTERFACE:
+					// send an acknowledgement
+					sendControl(controlSendBuffer, 0);
+					break;
+
 				default:
 					if(usb_state < USBError) {
 						change_state(USBUnknownRequest);
 					}
 			}
 
-			// get the next SETUP packet
-			receiveControl(controlRecvBuffer, sizeof(USBSetupPacket));
+			//DEBUG
+/*			static int count = 0;
+			count++;
+			if(count >= 2) {
+				Reboot();
+			}
+//*/
 
-			break;
-		case USBSetupPacketClass:
-			//TODO
-			break;
-		case USBSetupPacketVendor:
-			//TODO
 			break;
 		default:
 			//TODO (reserved bits that aren't used)
 			break;
 	}
 }
-
 
 static void create_descriptors() {
 	if(configurations == NULL) {
@@ -1005,12 +856,12 @@ USBConfigurationDescriptor* usb_get_configuration_descriptor(int index, uint8_t 
 
 void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType) {
 	if(transferType == USBInterrupt) {
-		if(usb_speed == USB_HIGHSPEED)
-			addEndpointDescriptor(interface, endpoint, direction, transferType, USBNoSynchronization, USBDataEndpoint, packetsizeFromSpeed(usb_speed), 9);
+		if(usb_get_speed() == USBHighSpeed)
+			addEndpointDescriptor(interface, endpoint, direction, transferType, USBNoSynchronization, USBDataEndpoint, getPacketSizeFromSpeed(), 9);
 		else
-			addEndpointDescriptor(interface, endpoint, direction, transferType, USBNoSynchronization, USBDataEndpoint, packetsizeFromSpeed(usb_speed), 32);
+			addEndpointDescriptor(interface, endpoint, direction, transferType, USBNoSynchronization, USBDataEndpoint, getPacketSizeFromSpeed(), 32);
 	} else {
-		addEndpointDescriptor(interface, endpoint, direction, transferType, USBNoSynchronization, USBDataEndpoint, packetsizeFromSpeed(usb_speed), 0);
+		addEndpointDescriptor(interface, endpoint, direction, transferType, USBNoSynchronization, USBDataEndpoint, getPacketSizeFromSpeed(), 0);
 	}
 }
 
@@ -1153,20 +1004,7 @@ static void releaseStringDescriptors() {
 	stringDescriptors = NULL;
 }
 
-static uint16_t packetsizeFromSpeed(uint8_t speed_id) {
-	switch(speed_id) {
-		case USB_HIGHSPEED:
-			return 512;
-		case USB_FULLSPEED:
-		case USB_FULLSPEED_48_MHZ:
-			return 64;
-		case USB_LOWSPEED:
-			return 32;
-		default:
-			return -1;
-	}
-}
-
+/*
 int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandler handler, uint32_t token) {
 	if(endpoint >= USB_NUM_ENDPOINTS) {
 		return -1;
@@ -1188,6 +1026,7 @@ int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHand
 
 	return 0;
 }
+*/
 
 int usb_shutdown() {
 #ifndef CONFIG_IPOD2G
@@ -1201,12 +1040,12 @@ int usb_shutdown() {
 	SET_REG(USB_PHY + OPHYPWR, OPHYPWR_FORCESUSPEND | OPHYPWR_PLLPOWERDOWN
 		| OPHYPWR_XOPOWERDOWN | OPHYPWR_ANALOGPOWERDOWN | OPHYPWR_UNKNOWNPOWERDOWN); // power down phy
 
+	// reset phy/link
 #ifdef CONFIG_IPOD2G
 	SET_REG(USB_PHY + ORSTCON, GET_REG(USB_PHY + ORSTCON) | ORSTCON_PHYSWRESET);
 #else
-	SET_REG(USB_PHY + ORSTCON, ORSTCON_PHYSWRESET | ORSTCON_LINKSWRESET | ORSTCON_PHYLINKSWRESET); // reset phy/link
+	SET_REG(USB_PHY + ORSTCON, GET_REG(USB_PHY + ORSTCON) | ORSTCON_LINKSWRESET | ORSTCON_PHYLINKSWRESET);
 #endif
-
 	udelay(USB_RESET_DELAYUS);	// wait a millisecond for the changes to stick
 
 #ifdef CONFIG_IPOD2G
@@ -1235,7 +1074,7 @@ static void change_state(USBState new_state) {
 	}
 }
 
-
+/*
 static RingBuffer* createRingBuffer(int size) {
 	RingBuffer* buffer;
 	buffer = (RingBuffer*) malloc(sizeof(RingBuffer));
@@ -1248,7 +1087,9 @@ static RingBuffer* createRingBuffer(int size) {
 
 	return buffer;
 }
+*/
 
+/*
 static int8_t ringBufferDequeue(RingBuffer* buffer) {
 	EnterCriticalSection();
 	if(buffer->count == 0) {
@@ -1268,7 +1109,9 @@ static int8_t ringBufferDequeue(RingBuffer* buffer) {
 	LeaveCriticalSection();
 	return value;
 }
+*/
 
+/*
 static int8_t ringBufferEnqueue(RingBuffer* buffer, uint8_t value) {
 	EnterCriticalSection();
 	if(buffer->count == buffer->size) {
@@ -1289,9 +1132,11 @@ static int8_t ringBufferEnqueue(RingBuffer* buffer, uint8_t value) {
 
 	return value;
 }
+*/
+
 
 USBSpeed usb_get_speed() {
-	switch(usb_speed) {
+	switch(DSTS_GET_SPEED(GET_REG(USB_OTG + DSTS))) {
 		case USB_HIGHSPEED:
 			return USBHighSpeed;
 		case USB_FULLSPEED:
@@ -1303,3 +1148,437 @@ USBSpeed usb_get_speed() {
 
 	return USBLowSpeed;
 }
+
+
+
+
+
+
+
+
+//TODO: new functions go here and need to be sorted
+
+static void sendInNak(void) {
+	SET_REG(USB_OTG + GINTSTS, GINTMSK_INNAK);
+	SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_SGNPINNAK);
+	while ((GET_REG(USB_OTG + GINTSTS) & GINTMSK_INNAK) != GINTMSK_INNAK);
+	SET_REG(USB_OTG + GINTSTS, GINTMSK_INNAK);
+}
+
+static void disableEndpointIn(uint8_t endpoint) {
+	if (InEPRegs[endpoint].control & USB_EPCON_ENABLE) {
+		sendInNak();
+
+		InEPRegs[endpoint].control |= USB_EPCON_SETNAK;
+		while ((InEPRegs[endpoint].interrupt & USB_EPINT_INEPNakEff) != USB_EPINT_INEPNakEff);
+		InEPRegs[endpoint].control |= USB_EPCON_SETNAK | USB_EPCON_DISABLE;
+		while ((InEPRegs[endpoint].interrupt & USB_EPINT_EPDisbld) != USB_EPINT_EPDisbld);
+		InEPRegs[endpoint].interrupt = InEPRegs[endpoint].interrupt;
+
+		uint32_t packetCount;
+		if (endpoint == USB_CONTROLEP) {
+			packetCount = USB_EPXFERSZ_PKTCNT_BIT_0(InEPRegs[endpoint].transferSize);
+		} else {
+			packetCount = USB_EPXFERSZ_PKTCNT(InEPRegs[endpoint].transferSize);
+		}
+		
+		// discard anything remaining in the current transfer for the endpoint
+		if (packetCount) {
+			endpointTransferInfos[endpoint].in.currentTransfer->bufferStartOffset +=
+				(endpointTransferInfos[endpoint].in.packetsLeft - packetCount) *
+				endpointTransferInfos[endpoint].in.packetSize;
+		} else {
+			endpointTransferInfos[endpoint].in.currentTransfer->bufferStartOffset +=
+				endpointTransferInfos[endpoint].in.bytesLeft;
+		}
+
+		flushTxFifo(endpointTransferInfos[endpoint].in.txFifo);
+
+		SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_CGNPINNAK);
+	}
+}
+
+static void flushTxFifo(uint32_t txFifo) {
+	SET_REG(USB_OTG + GRSTCTL, GET_REG(USB_OTG + GRSTCTL) & ~GRSTCTL_TXFNUM_MASK);
+	SET_REG(USB_OTG + GRSTCTL, (GET_REG(USB_OTG + GRSTCTL) & ~GRSTCTL_TXFNUM_MASK) | 
+		GRSTCTL_UNKN1 | (txFifo << GRSTCTL_UNKN_TX_FIFO_SHIFT));
+	while (GET_REG(USB_OTG + GRSTCTL) & GRSTCTL_TXFFLSH);
+}
+
+static void setStall(uint8_t endpoint, USBDirection direction, OnOff onoff) {
+	if (endpoint >= USB_NUM_ENDPOINTS) {
+		return;
+	}
+	
+	if (onoff == ON) {
+		// set the stall bit for the endpoint
+		if (direction == USBIn) {
+			InEPRegs[endpoint].control |= USB_EPCON_STALL;
+		} else if (direction == USBOut) {
+			OutEPRegs[endpoint].control |= USB_EPCON_STALL;
+		}
+	} else {
+		// remove the stall bit for the endpoint
+		if (endpoint == USB_CONTROLEP) {
+			return;
+		}
+		if (direction == USBIn) {
+			InEPRegs[endpoint].control &= ~USB_EPCON_STALL;
+		} else if (direction == USBOut) {
+			OutEPRegs[endpoint].control &= ~USB_EPCON_STALL;
+		}
+	}
+}
+
+static void clearEndpointConfiguration(uint8_t endpoint, USBDirection direction) {
+	USBEndpointTransferInfo * endpointTransferInfo;
+	if (direction == USBIn) {
+		InEPRegs[endpoint].control = USB_EPCON_NONE;
+		InEPRegs[endpoint].transferSize = USB_EPXFERSZ_NONE;
+		InEPRegs[endpoint].interrupt = USB_EPINT_ALL;
+		InEPRegs[endpoint].dmaAddress = NULL;
+		endpointTransferInfo = &(endpointTransferInfos[endpoint].in);
+	} else if (direction == USBOut) {
+		OutEPRegs[endpoint].control = USB_EPCON_NONE;
+		OutEPRegs[endpoint].transferSize = USB_EPXFERSZ_NONE;
+		OutEPRegs[endpoint].interrupt = USB_EPINT_ALL;
+		OutEPRegs[endpoint].dmaAddress = NULL;
+		endpointTransferInfo = &(endpointTransferInfos[endpoint].out);
+	}
+
+	if (endpointTransferInfo->txFifo) {
+		txFifosUsed[endpointTransferInfo->txFifo - 1] = FALSE;
+	}
+
+	memset(endpointTransferInfo, 0, sizeof(USBEndpointTransferInfo));
+}
+
+static void shutdownEndpoint(uint8_t endpoint, USBDirection direction) {
+	disableEndpoint(endpoint, direction);
+	clearEndpointConfiguration(endpoint, direction);
+}
+
+static void disableEndpoint(uint8_t endpoint, USBDirection direction) {
+	USBEndpointTransferInfo * endpointTransferInfo;
+	if (direction == USBIn) {
+		if (hwDedicatedFifoEnabled) {
+			disableEndpointIn(endpoint);
+		} else {
+			//TODO: S5L8900 only
+		}
+		endpointTransferInfo = &(endpointTransferInfos[endpoint].in);
+	} else if (direction == USBOut && (OutEPRegs[endpoint].control & USB_EPCON_ENABLE)) {
+		// send an out nak
+		SET_REG(USB_OTG + GINTSTS, GINTMSK_OUTNAK);
+		SET_REG(USB_OTG + DCTL, DCTL_SGOUTNAK);
+		while ((GET_REG(USB_OTG + GINTSTS) & GINTMSK_OUTNAK) != GINTMSK_OUTNAK);
+		SET_REG(USB_OTG + GINTSTS, GINTMSK_OUTNAK);
+
+		// disable the endpoint
+		OutEPRegs[endpoint].control |= USB_EPCON_SETNAK | USB_EPCON_DISABLE;
+		while ((OutEPRegs[endpoint].interrupt & USB_EPINT_EPDisbld) != USB_EPINT_EPDisbld);
+		OutEPRegs[endpoint].interrupt = OutEPRegs[endpoint].interrupt;
+		SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_CGOUTNAK);
+
+		endpointTransferInfo = &(endpointTransferInfos[endpoint].out);
+	}
+
+	endpointTransferInfo->bytesLeft = 0;
+	endpointTransferInfo->packetsLeft = 0;
+	if (endpointTransferInfo->currentTransfer) {
+		USBTransfer * transfer = endpointTransferInfo->currentTransfer;
+		USBTransfer * nextTransfer = transfer;
+		endpointTransferInfo->currentTransfer = NULL;
+		endpointTransferInfo->lastTransfer = NULL;
+		while (transfer) {
+			nextTransfer = transfer->next;
+			transfer->status = USBTransferFailed;
+			handleTransferCompleted(transfer);
+			transfer = nextTransfer;
+		}
+	}
+}
+
+static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int packetSize, int token) {
+	USBEndpointTransferInfo * endpointTransferInfo;
+	if (direction == USBIn) {
+		endpointTransferInfo = &(endpointTransferInfos[endpoint].in);
+	} else if (direction == USBOut) {
+		endpointTransferInfo = &(endpointTransferInfos[endpoint].out);
+	}
+	endpointTransferInfo->packetSize = packetSize;
+	endpointTransferInfo->type = type;
+	endpointTransferInfo->token = token;
+	
+	if (direction == USBIn || type == USBBulk || type == USBInterrupt) {
+		volatile uint32_t * controlReg;
+		uint32_t txFifo = 0;
+		uint32_t endpointDaintMask;
+		if (direction == USBIn) {
+			controlReg = &(InEPRegs[endpoint].control);
+			*controlReg = USB_EPCON_NONE;
+			endpointDaintMask = 1 << (endpoint + DAINT_IN_SHIFT);
+			if (hwDedicatedFifoEnabled) {
+				// find an unused tx fifo for our endpoint and claim it
+				while (txFifo != USB_NUM_TX_FIFOS) {
+					if (txFifosUsed[txFifo] == FALSE) {
+						txFifosUsed[txFifo] = TRUE;
+						break;
+					}
+					txFifo++;
+				}
+				endpointTransferInfo->txFifo = txFifo + 1;		// 1-based
+				SET_REG(USB_OTG + DIEPTXF(txFifo), nextDptxfsizStartAddr | (DPTXFSIZ_DEPTH << FIFO_DEPTH_SHIFT));
+				nextDptxfsizStartAddr += DPTXFSIZ_DEPTH;
+			} else {
+				//TODO: S5L8900 only
+			}
+		} else if (direction == USBOut) {
+			controlReg = &(OutEPRegs[endpoint].control);
+			*controlReg = USB_EPCON_NONE;
+			endpointDaintMask = 1 << (endpoint + DAINT_OUT_SHIFT);
+		}
+		*controlReg = packetSize | ((type & USB_EPCON_TYPE_MASK) << USB_EPCON_TYPE_SHIFT)
+			| USB_EPCON_ACTIVE | USB_EPCON_SET0PID | USB_EPCON_SETNAK
+			| (txFifo ? (((txFifo + 1) & USB_EPCON_TXFNUM_MASK) << USB_EPCON_TXFNUM_SHIFT) : 0);
+			/*TODO | S5L8900unkn */
+		SET_REG(USB_OTG + DAINTMSK, GET_REG(USB_OTG + DAINTMSK) | endpointDaintMask);
+	}
+}
+
+static void send(uint8_t endpoint) {
+	USBTransfer * transfer = endpointTransferInfos[endpoint].in.currentTransfer;
+	
+	uint32_t transferSize;
+	if (endpoint == USB_CONTROLEP) {
+		transferSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
+	} else {
+		transferSize = hwMaxTransferSize;
+	}
+	if (transferSize > transfer->bufferEndOffset - transfer->bufferStartOffset) {
+		transferSize = transfer->bufferEndOffset - transfer->bufferStartOffset;
+	}
+
+	CleanAndInvalidateCPUDataCache();
+
+	InEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bufferStartOffset;
+	
+	uint32_t packetSize = endpointTransferInfos[endpoint].in.packetSize;
+	uint32_t packetCount;
+	if (transferSize == 0) {
+		packetCount = 1;
+	} else {
+		packetCount = (transferSize + packetSize - 1) / packetSize;
+		if (packetCount > hwMaxPacketCount) {
+			packetCount = hwMaxPacketCount;
+			transferSize = hwMaxPacketCount * packetSize;
+		}
+	}
+
+	InEPRegs[endpoint].transferSize = ((packetCount & DEPTSIZ_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT)
+		| (transferSize & DEPTSIZ_XFERSIZ_MASK) | ((USB_MULTICOUNT & DIEPTSIZ_MC_MASK) << DIEPTSIZ_MC_SHIFT);
+	InEPRegs[endpoint].control |= USB_EPCON_CLEARNAK | USB_EPCON_ENABLE;
+
+	endpointTransferInfos[endpoint].in.bytesLeft = transferSize;
+	endpointTransferInfos[endpoint].in.packetsLeft = packetCount;
+}
+
+static void receive(uint8_t endpoint) {
+	USBTransfer * transfer = endpointTransferInfos[endpoint].out.currentTransfer;
+	
+	uint32_t transferSize = transfer->bufferEndOffset - transfer->bufferStartOffset;
+	if (transferSize > hwMaxTransferSize) {
+		transferSize = hwMaxTransferSize;
+	}
+
+	CleanAndInvalidateCPUDataCache();
+
+	OutEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bufferStartOffset;
+	
+	uint32_t packetSize = endpointTransferInfos[endpoint].out.packetSize;
+	uint32_t packetCount;
+	if (transferSize == 0) {
+		packetCount = 1;
+	} else {
+		packetCount = (transferSize + packetSize - 1) / packetSize;
+		if (packetCount > hwMaxPacketCount) {
+			packetCount = hwMaxPacketCount;
+			transferSize = hwMaxPacketCount * packetSize;
+		}
+	}
+
+	OutEPRegs[endpoint].transferSize = ((packetCount & DEPTSIZ_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT)
+		| (transferSize & DEPTSIZ_XFERSIZ_MASK) | ((USB_MULTICOUNT & DIEPTSIZ_MC_MASK) << DIEPTSIZ_MC_SHIFT);
+	OutEPRegs[endpoint].control |= USB_EPCON_CLEARNAK | USB_EPCON_ENABLE;
+
+	endpointTransferInfos[endpoint].out.bytesLeft = transferSize;
+	endpointTransferInfos[endpoint].out.packetsLeft = packetCount;
+}
+
+static void receiveControl(Boolean clearNAK) {
+	OutEPRegs[USB_CONTROLEP].transferSize = ((USB_SETUP_PACKETS_AT_A_TIME & DOEPTSIZ0_SUPCNT_MASK) << DOEPTSIZ0_SUPCNT_SHIFT)
+		| ((USB_SETUP_PACKETS_AT_A_TIME & DOEPTSIZ0_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT)
+		| (USB_CONTROLEP_MAX_TRANSFER_SIZE & DEPTSIZ0_XFERSIZ_MASK);
+
+	CleanAndInvalidateCPUDataCache();
+
+	OutEPRegs[USB_CONTROLEP].dmaAddress = controlRecvBuffer;
+
+	if (clearNAK) {
+		OutEPRegs[USB_CONTROLEP].control |= USB_EPCON_CLEARNAK | USB_EPCON_ENABLE;	
+	} else {
+		OutEPRegs[USB_CONTROLEP].control |= USB_EPCON_ENABLE;
+	}
+}
+
+static void handleTransferCompleted(USBTransfer * transfer) {
+	if (transfer->handler) {
+		transfer->handler(transfer);
+	}
+	free(transfer);
+}
+
+static uint16_t getPacketSizeFromSpeed(void) {
+	if (usb_get_speed() == USBHighSpeed) {
+		return 512;
+	} else {
+		return 64;
+	}
+}
+
+static void setAddress(uint8_t address) {
+	SET_REG(USB_OTG + DCFG, (GET_REG(USB_OTG + DCFG) & ~DCFG_DEVICEADDRMSK)
+		| ((address & DCFG_DEVICEADDR_UNSHIFTED_MASK) << DCFG_DEVICEADDR_SHIFT));
+}
+
+static void handleEndpointInInterrupt(uint8_t endpoint) {
+	// get and clear the interrupt register
+	uint32_t status = InEPRegs[endpoint].interrupt;
+	InEPRegs[endpoint].interrupt = status;
+
+	USBEndpointTransferInfo * endpointInfo = &(endpointTransferInfos[endpoint].in);
+
+	if (status & USB_EPINT_XferCompl) {
+		endpointInfo->currentTransfer->bufferStartOffset += endpointInfo->bytesLeft = 0;
+		endpointInfo->packetsLeft = 0;
+		if (endpointInfo->currentTransfer->bufferStartOffset >= endpointInfo->currentTransfer->bufferEndOffset) {
+			// the current transfer is done
+			USBTransfer * completedTransfer = endpointInfo->currentTransfer;
+			completedTransfer->status = USBTransferSuccess;
+			if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {
+				endpointInfo->currentTransfer = NULL;
+				endpointInfo->lastTransfer = NULL;
+			} else {
+				endpointInfo->currentTransfer = completedTransfer->next;
+				completedTransfer->next = NULL;
+				send(endpoint);
+			}
+			handleTransferCompleted(completedTransfer);
+		} else {
+			// the current transfer is still in progress, so send more of it
+			send(endpoint);
+		}
+	}
+
+	if (status & USB_EPINT_TimeOUT) {
+		if (hwDedicatedFifoEnabled) {
+			sendInNak();
+			disableEndpointIn(endpoint);
+			flushTxFifo(endpointInfo->txFifo);
+			SET_REG(USB_OTG + DCTL, GET_REG(USB_OTG + DCTL) | DCTL_CGNPINNAK);
+			send(endpoint);
+		} else {
+			//TODO: S5L8900
+		}
+	}
+
+	if (status & USB_EPINT_AHBErr) {
+		//TODO: panic
+	}
+}
+
+
+static void handleEndpointOutInterrupt(uint8_t endpoint) {
+	// get and clear the interrupt register
+	uint32_t status = OutEPRegs[endpoint].interrupt;
+	udelay(USB_INTERRUPT_CLEAR_DELAYUS);
+	OutEPRegs[endpoint].interrupt = status;
+
+	USBEndpointTransferInfo * endpointInfo = &(endpointTransferInfos[endpoint].out);
+
+	//TODO: this is a giant mess of branches that needs cleaning up
+	if (status & USB_EPINT_XferCompl) {
+		uint32_t bytesReceived = endpointInfo->bytesLeft - (OutEPRegs[endpoint].transferSize & DEPTSIZ_XFERSIZ_MASK);
+		endpointInfo->currentTransfer->bufferStartOffset += bytesReceived;
+
+		uint32_t extraBytes = bytesReceived % endpointInfo->packetSize;
+		if ((endpointInfo->bytesLeft > bytesReceived && extraBytes != 0) || endpointInfo->bytesLeft == 0) {
+			// transfer is over (either received a partial packet when it should have been full or nothing left)
+			endpointInfo->bytesLeft = 0;
+			USBTransfer * completedTransfer = endpointInfo->currentTransfer;
+			completedTransfer->status = USBTransferSuccess;
+			if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {
+				endpointInfo->currentTransfer = NULL;
+				endpointInfo->lastTransfer = NULL;
+			} else {
+				endpointInfo->currentTransfer = completedTransfer->next;
+				completedTransfer->next = NULL;
+				receive(endpoint);
+			}
+		} else {
+			// have some bytes left to transfer
+			uint32_t packetsReceived = endpointInfo->packetsLeft - ((OutEPRegs[endpoint].transferSize
+				>> DEPTSIZ_PKTCNT_SHIFT) & DEPTSIZ_PKTCNT_MASK) - 1;
+			if ((extraBytes != 0) || (packetsReceived != (bytesReceived / endpointInfo->packetSize))) {
+				// partial transfer
+				endpointInfo->bytesLeft = 0;
+				endpointInfo->packetsLeft = 0;
+				if (endpointInfo->currentTransfer->bufferStartOffset >= endpointInfo->currentTransfer->bufferEndOffset) {
+					USBTransfer * completedTransfer = endpointInfo->currentTransfer;
+					completedTransfer->status = USBTransferSuccess;
+					if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {
+						endpointInfo->currentTransfer = NULL;
+						endpointInfo->lastTransfer = NULL;
+					} else {
+						endpointInfo->currentTransfer = completedTransfer->next;
+						completedTransfer->next = NULL;
+						receive(endpoint);
+					}
+				} else {
+					receive(endpoint);
+				}
+			} else {
+				// transfer complete
+				endpointInfo->packetsLeft = 0;
+				USBTransfer * completedTransfer = endpointInfo->currentTransfer;
+				completedTransfer->status = USBTransferSuccess;
+				if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {
+					endpointInfo->currentTransfer = NULL;
+					endpointInfo->lastTransfer = NULL;
+				} else {
+					endpointInfo->currentTransfer = completedTransfer->next;
+					completedTransfer->next = NULL;
+					receive(endpoint);
+				}
+			}
+		}
+	}
+
+	if (status & USB_EPINT_AHBErr) {
+		//TODO: panic
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
