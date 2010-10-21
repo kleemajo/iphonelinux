@@ -83,7 +83,7 @@ static void setStall(uint8_t endpoint, USBDirection direction, OnOff onoff);
 static void clearEndpointConfiguration(uint8_t endpoint, USBDirection direction);
 static void shutdownEndpoint(uint8_t endpoint, USBDirection direction);
 static void disableEndpoint(uint8_t endpoint, USBDirection direction);
-static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int packetSize, int token);
+static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int maxPacketSize, int token);
 static void send(uint8_t endpoint);
 static void receive(uint8_t endpoint);
 static void receiveControl(Boolean clearNAK);
@@ -104,7 +104,7 @@ static uint32_t nextDptxfsizStartAddr;
 
 // Variables read from the usb hardware
 static uint32_t hwMaxPacketCount;
-static uint32_t hwMaxTransferSize;
+static uint32_t hwMaxPacketSize;
 static Boolean hwDedicatedFifoEnabled;
 
 //static void usbTxRx(int endpoint, USBDirection direction, USBTransferType transferType, void* buffer, int bufferLen);
@@ -114,6 +114,9 @@ static Boolean hwDedicatedFifoEnabled;
 TODO: temporary stuff to make code compile! needs removal
 ==================
 */
+
+//DEBUG
+int debugcount = 0;
 
 int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandlerOld handler, uint32_t token) {return 0;}
 void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen) {}
@@ -257,7 +260,7 @@ int usb_start(void) {
 	}
 
 	hwMaxPacketCount = ((1 << (GET_BITS(USB_OTG + GHWCFG3, 4, 3) + 4))-1);
-	hwMaxTransferSize = ((1 << (GET_BITS(USB_OTG + GHWCFG3, 0, 4) + 0xB))-1);
+	hwMaxPacketSize = ((1 << (GET_BITS(USB_OTG + GHWCFG3, 0, 4) + 0xB))-1);
 
 	// generate a usb core reset
 	SET_REG(USB_OTG + GRSTCTL, GRSTCTL_CORESOFTRESET);
@@ -384,8 +387,8 @@ static int resetUSB() {
 	SET_REG(USB_OTG + GRXFSIZ, GRXFSIZ_DEPTH);
 	SET_REG(USB_OTG + GNPTXFSIZ, GNPTXFSIZ_STARTADDR | (GNPTXFSIZ_DEPTH << FIFO_DEPTH_SHIFT));
 
-	endpointTransferInfos[USB_CONTROLEP].out.packetSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
-	endpointTransferInfos[USB_CONTROLEP].in.packetSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
+	endpointTransferInfos[USB_CONTROLEP].out.maxPacketSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
+	endpointTransferInfos[USB_CONTROLEP].in.maxPacketSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
 
 	InEPRegs[USB_CONTROLEP].control = USB_EPCON_NONE;
 	OutEPRegs[USB_CONTROLEP].control = USB_EPCON_NONE;
@@ -408,9 +411,6 @@ static int resetUSB() {
 }
 
 static void sendControl(void * buffer, int bufferLen) {
-	if (bufferLen > 20) {
-		Reboot();
-	}
 	USBTransfer * transfer = malloc(sizeof(USBTransfer));
 	if (transfer == NULL) {
 		setStall(USB_CONTROLEP, USBIn, TRUE);
@@ -420,7 +420,7 @@ static void sendControl(void * buffer, int bufferLen) {
 			memcpy(controlSendBuffer, buffer, bufferLen);
 		}
 		transfer->buffer = controlSendBuffer;
-		transfer->bufferEndOffset = bufferLen;
+		transfer->size = bufferLen;
 		transfer->handler = handleControlSent;
 		startTransfer(USB_CONTROLEP, USBIn, transfer);
 	}
@@ -433,7 +433,7 @@ static void handleControlSent(USBTransfer * transfer) {
 }
 
 static void startTransfer(uint8_t endpoint, USBDirection direction, USBTransfer * transfer) {
-	transfer->bufferStartOffset = 0;
+	transfer->bytesSent = 0;
 	transfer->status = USBTransferInProgress;
 	transfer->next = NULL;
 
@@ -530,12 +530,7 @@ static int advanceTxQueue() {
 
 static void usbIRQHandler(uint32_t token) {
 	//DEBUG
-/*	static int count = 0;
-	count++;
-	if(count >= 2) {
-		//return;
-	}
-//*/
+	debugcount++;
 
 	// get and acknowledge all interrupts
 	uint32_t status = GET_REG(USB_OTG + GINTSTS);
@@ -594,7 +589,7 @@ static void usbIRQHandler(uint32_t token) {
 					processSetupPacket();
 
 					// get the next SETUP packet
-					receiveControl(USB_CONTROLEP);
+					receiveControl(TRUE);
 				} else {
 					uint32_t transferSize;
 					if (control_ep_out_status & USB_EPINT_XferCompl) {
@@ -691,12 +686,13 @@ static void processSetupPacket(void) {
 					}
 
 					if(usb_state < USBError) {
-						if(stall)
+						if(stall) {
 							setStall(USB_CONTROLEP, USBIn, TRUE);
-						else
+						} else {
 							sendControl(controlSendBuffer, length);
+						}
 					}
-
+					
 					break;
 
 				case USB_GET_INTERFACE:
@@ -705,9 +701,7 @@ static void processSetupPacket(void) {
 
 				case USB_GET_STATUS:
 					//TODO: needs update...
-					// FIXME: iBoot doesn't really care about this status
-					*((uint16_t*) controlSendBuffer) = 0;
-					sendControl(controlSendBuffer, sizeof(uint16_t));
+					sendControl(NULL, 0);
 					break;
 
 				case USB_SET_FEATURE:
@@ -747,14 +741,6 @@ static void processSetupPacket(void) {
 						change_state(USBUnknownRequest);
 					}
 			}
-
-			//DEBUG
-/*			static int count = 0;
-			count++;
-			if(count >= 2) {
-				Reboot();
-			}
-//*/
 
 			break;
 		default:
@@ -1175,21 +1161,21 @@ static void disableEndpointIn(uint8_t endpoint) {
 		while ((InEPRegs[endpoint].interrupt & USB_EPINT_EPDisbld) != USB_EPINT_EPDisbld);
 		InEPRegs[endpoint].interrupt = InEPRegs[endpoint].interrupt;
 
-		uint32_t packetCount;
+		uint32_t packetsSent;
 		if (endpoint == USB_CONTROLEP) {
-			packetCount = USB_EPXFERSZ_PKTCNT_BIT_0(InEPRegs[endpoint].transferSize);
+			packetsSent = USB_EPXFERSZ_PKTCNT_BIT_0(InEPRegs[endpoint].transferSize);
 		} else {
-			packetCount = USB_EPXFERSZ_PKTCNT(InEPRegs[endpoint].transferSize);
+			packetsSent = USB_EPXFERSZ_PKTCNT(InEPRegs[endpoint].transferSize);
 		}
 		
 		// discard anything remaining in the current transfer for the endpoint
-		if (packetCount) {
-			endpointTransferInfos[endpoint].in.currentTransfer->bufferStartOffset +=
-				(endpointTransferInfos[endpoint].in.packetsLeft - packetCount) *
-				endpointTransferInfos[endpoint].in.packetSize;
+		if (packetsSent) {
+			endpointTransferInfos[endpoint].in.currentTransfer->bytesSent +=
+				(endpointTransferInfos[endpoint].in.currentTransferPacketsLeft - packetsSent) *
+				endpointTransferInfos[endpoint].in.maxPacketSize;
 		} else {
-			endpointTransferInfos[endpoint].in.currentTransfer->bufferStartOffset +=
-				endpointTransferInfos[endpoint].in.bytesLeft;
+			endpointTransferInfos[endpoint].in.currentTransfer->bytesSent +=
+				endpointTransferInfos[endpoint].in.currentPacketSize;
 		}
 
 		flushTxFifo(endpointTransferInfos[endpoint].in.txFifo);
@@ -1283,8 +1269,8 @@ static void disableEndpoint(uint8_t endpoint, USBDirection direction) {
 		endpointTransferInfo = &(endpointTransferInfos[endpoint].out);
 	}
 
-	endpointTransferInfo->bytesLeft = 0;
-	endpointTransferInfo->packetsLeft = 0;
+	endpointTransferInfo->currentPacketSize = 0;
+	endpointTransferInfo->currentTransferPacketsLeft = 0;
 	if (endpointTransferInfo->currentTransfer) {
 		USBTransfer * transfer = endpointTransferInfo->currentTransfer;
 		USBTransfer * nextTransfer = transfer;
@@ -1299,14 +1285,14 @@ static void disableEndpoint(uint8_t endpoint, USBDirection direction) {
 	}
 }
 
-static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int packetSize, int token) {
+static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int maxPacketSize, int token) {
 	USBEndpointTransferInfo * endpointTransferInfo;
 	if (direction == USBIn) {
 		endpointTransferInfo = &(endpointTransferInfos[endpoint].in);
 	} else if (direction == USBOut) {
 		endpointTransferInfo = &(endpointTransferInfos[endpoint].out);
 	}
-	endpointTransferInfo->packetSize = packetSize;
+	endpointTransferInfo->maxPacketSize = maxPacketSize;
 	endpointTransferInfo->type = type;
 	endpointTransferInfo->token = token;
 	
@@ -1338,7 +1324,7 @@ static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferT
 			*controlReg = USB_EPCON_NONE;
 			endpointDaintMask = 1 << (endpoint + DAINT_OUT_SHIFT);
 		}
-		*controlReg = packetSize | ((type & USB_EPCON_TYPE_MASK) << USB_EPCON_TYPE_SHIFT)
+		*controlReg = maxPacketSize | ((type & USB_EPCON_TYPE_MASK) << USB_EPCON_TYPE_SHIFT)
 			| USB_EPCON_ACTIVE | USB_EPCON_SET0PID | USB_EPCON_SETNAK
 			| (txFifo ? (((txFifo + 1) & USB_EPCON_TXFNUM_MASK) << USB_EPCON_TXFNUM_SHIFT) : 0);
 			/*TODO | S5L8900unkn */
@@ -1348,71 +1334,71 @@ static void setupEndpoint(uint8_t endpoint, USBDirection direction, USBTransferT
 
 static void send(uint8_t endpoint) {
 	USBTransfer * transfer = endpointTransferInfos[endpoint].in.currentTransfer;
-	
-	uint32_t transferSize;
+
+	uint32_t packetSize;
 	if (endpoint == USB_CONTROLEP) {
-		transferSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
+		packetSize = USB_CONTROLEP_MAX_TRANSFER_SIZE;
 	} else {
-		transferSize = hwMaxTransferSize;
+		packetSize = hwMaxPacketSize;
 	}
-	if (transferSize > transfer->bufferEndOffset - transfer->bufferStartOffset) {
-		transferSize = transfer->bufferEndOffset - transfer->bufferStartOffset;
+	if (packetSize > transfer->size - transfer->bytesSent) {
+		packetSize = transfer->size - transfer->bytesSent;
 	}
 
 	CleanAndInvalidateCPUDataCache();
 
-	InEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bufferStartOffset;
-	
-	uint32_t packetSize = endpointTransferInfos[endpoint].in.packetSize;
+	InEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bytesSent;
+
+	uint32_t maxPacketSize = endpointTransferInfos[endpoint].in.maxPacketSize;
 	uint32_t packetCount;
-	if (transferSize == 0) {
+	if (packetSize == 0) {
 		packetCount = 1;
 	} else {
-		packetCount = (transferSize + packetSize - 1) / packetSize;
+		packetCount = (packetSize + maxPacketSize - 1) / maxPacketSize;
 		if (packetCount > hwMaxPacketCount) {
 			packetCount = hwMaxPacketCount;
-			transferSize = hwMaxPacketCount * packetSize;
+			packetSize = hwMaxPacketCount * maxPacketSize;
 		}
 	}
 
 	InEPRegs[endpoint].transferSize = ((packetCount & DEPTSIZ_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT)
-		| (transferSize & DEPTSIZ_XFERSIZ_MASK) | ((USB_MULTICOUNT & DIEPTSIZ_MC_MASK) << DIEPTSIZ_MC_SHIFT);
+		| (packetSize & DEPTSIZ_XFERSIZ_MASK) | ((USB_MULTICOUNT & DIEPTSIZ_MC_MASK) << DIEPTSIZ_MC_SHIFT);
 	InEPRegs[endpoint].control |= USB_EPCON_CLEARNAK | USB_EPCON_ENABLE;
 
-	endpointTransferInfos[endpoint].in.bytesLeft = transferSize;
-	endpointTransferInfos[endpoint].in.packetsLeft = packetCount;
+	endpointTransferInfos[endpoint].in.currentPacketSize = packetSize;
+	endpointTransferInfos[endpoint].in.currentTransferPacketsLeft = packetCount;
 }
 
 static void receive(uint8_t endpoint) {
 	USBTransfer * transfer = endpointTransferInfos[endpoint].out.currentTransfer;
 	
-	uint32_t transferSize = transfer->bufferEndOffset - transfer->bufferStartOffset;
-	if (transferSize > hwMaxTransferSize) {
-		transferSize = hwMaxTransferSize;
+	uint32_t packetSize = transfer->size - transfer->bytesSent;
+	if (packetSize > hwMaxPacketSize) {
+		packetSize = hwMaxPacketSize;
 	}
 
 	CleanAndInvalidateCPUDataCache();
 
-	OutEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bufferStartOffset;
+	OutEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bytesSent;
 	
-	uint32_t packetSize = endpointTransferInfos[endpoint].out.packetSize;
+	uint32_t maxPacketSize = endpointTransferInfos[endpoint].out.maxPacketSize;
 	uint32_t packetCount;
-	if (transferSize == 0) {
+	if (packetSize == 0) {
 		packetCount = 1;
 	} else {
-		packetCount = (transferSize + packetSize - 1) / packetSize;
+		packetCount = (packetSize + maxPacketSize - 1) / packetSize;
 		if (packetCount > hwMaxPacketCount) {
 			packetCount = hwMaxPacketCount;
-			transferSize = hwMaxPacketCount * packetSize;
+			packetSize = hwMaxPacketCount * maxPacketSize;
 		}
 	}
 
 	OutEPRegs[endpoint].transferSize = ((packetCount & DEPTSIZ_PKTCNT_MASK) << DEPTSIZ_PKTCNT_SHIFT)
-		| (transferSize & DEPTSIZ_XFERSIZ_MASK) | ((USB_MULTICOUNT & DIEPTSIZ_MC_MASK) << DIEPTSIZ_MC_SHIFT);
+		| (packetSize & DEPTSIZ_XFERSIZ_MASK) | ((USB_MULTICOUNT & DIEPTSIZ_MC_MASK) << DIEPTSIZ_MC_SHIFT);
 	OutEPRegs[endpoint].control |= USB_EPCON_CLEARNAK | USB_EPCON_ENABLE;
 
-	endpointTransferInfos[endpoint].out.bytesLeft = transferSize;
-	endpointTransferInfos[endpoint].out.packetsLeft = packetCount;
+	endpointTransferInfos[endpoint].out.currentPacketSize = packetSize;
+	endpointTransferInfos[endpoint].out.currentTransferPacketsLeft = packetCount;
 }
 
 static void receiveControl(Boolean clearNAK) {
@@ -1459,9 +1445,9 @@ static void handleEndpointInInterrupt(uint8_t endpoint) {
 	USBEndpointTransferInfo * endpointInfo = &(endpointTransferInfos[endpoint].in);
 
 	if (status & USB_EPINT_XferCompl) {
-		endpointInfo->currentTransfer->bufferStartOffset += endpointInfo->bytesLeft = 0;
-		endpointInfo->packetsLeft = 0;
-		if (endpointInfo->currentTransfer->bufferStartOffset >= endpointInfo->currentTransfer->bufferEndOffset) {
+		endpointInfo->currentTransfer->bytesSent += endpointInfo->currentPacketSize;
+		endpointInfo->currentTransferPacketsLeft = 0;
+		if (endpointInfo->currentTransfer->bytesSent >= endpointInfo->currentTransfer->size) {
 			// the current transfer is done
 			USBTransfer * completedTransfer = endpointInfo->currentTransfer;
 			completedTransfer->status = USBTransferSuccess;
@@ -1508,13 +1494,13 @@ static void handleEndpointOutInterrupt(uint8_t endpoint) {
 
 	//TODO: this is a giant mess of branches that needs cleaning up
 	if (status & USB_EPINT_XferCompl) {
-		uint32_t bytesReceived = endpointInfo->bytesLeft - (OutEPRegs[endpoint].transferSize & DEPTSIZ_XFERSIZ_MASK);
-		endpointInfo->currentTransfer->bufferStartOffset += bytesReceived;
+		uint32_t bytesReceived = endpointInfo->currentPacketSize - (OutEPRegs[endpoint].transferSize & DEPTSIZ_XFERSIZ_MASK);
+		endpointInfo->currentTransfer->bytesSent += bytesReceived;
 
-		uint32_t extraBytes = bytesReceived % endpointInfo->packetSize;
-		if ((endpointInfo->bytesLeft > bytesReceived && extraBytes != 0) || endpointInfo->bytesLeft == 0) {
+		uint32_t extraBytes = bytesReceived % endpointInfo->maxPacketSize;
+		if ((endpointInfo->currentPacketSize > bytesReceived && extraBytes != 0) || endpointInfo->currentPacketSize == 0) {
 			// transfer is over (either received a partial packet when it should have been full or nothing left)
-			endpointInfo->bytesLeft = 0;
+			endpointInfo->currentPacketSize = 0;
 			USBTransfer * completedTransfer = endpointInfo->currentTransfer;
 			completedTransfer->status = USBTransferSuccess;
 			if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {
@@ -1527,13 +1513,13 @@ static void handleEndpointOutInterrupt(uint8_t endpoint) {
 			}
 		} else {
 			// have some bytes left to transfer
-			uint32_t packetsReceived = endpointInfo->packetsLeft - ((OutEPRegs[endpoint].transferSize
+			uint32_t packetsReceived = endpointInfo->currentTransferPacketsLeft - ((OutEPRegs[endpoint].transferSize
 				>> DEPTSIZ_PKTCNT_SHIFT) & DEPTSIZ_PKTCNT_MASK) - 1;
-			if ((extraBytes != 0) || (packetsReceived != (bytesReceived / endpointInfo->packetSize))) {
+			if ((extraBytes != 0) || (packetsReceived != (bytesReceived / endpointInfo->maxPacketSize))) {
 				// partial transfer
-				endpointInfo->bytesLeft = 0;
-				endpointInfo->packetsLeft = 0;
-				if (endpointInfo->currentTransfer->bufferStartOffset >= endpointInfo->currentTransfer->bufferEndOffset) {
+				endpointInfo->currentPacketSize = 0;
+				endpointInfo->currentTransferPacketsLeft = 0;
+				if (endpointInfo->currentTransfer->bytesSent >= endpointInfo->currentTransfer->size) {
 					USBTransfer * completedTransfer = endpointInfo->currentTransfer;
 					completedTransfer->status = USBTransferSuccess;
 					if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {
@@ -1549,7 +1535,7 @@ static void handleEndpointOutInterrupt(uint8_t endpoint) {
 				}
 			} else {
 				// transfer complete
-				endpointInfo->packetsLeft = 0;
+				endpointInfo->currentTransferPacketsLeft = 0;
 				USBTransfer * completedTransfer = endpointInfo->currentTransfer;
 				completedTransfer->status = USBTransferSuccess;
 				if (endpointInfo->currentTransfer == endpointInfo->lastTransfer) {

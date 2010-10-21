@@ -99,8 +99,8 @@ struct USBTransfer {
 	//uint32_t endpoint;
 	uint8_t * buffer;
 	USBTransferStatus status;
-	uint32_t bufferEndOffset;
-	uint32_t bufferStartOffset;
+	uint32_t size;
+	uint32_t bytesSent;
 	USBEndpointHandler handler;
 	USBTransfer * next;
 };
@@ -108,11 +108,11 @@ struct USBTransfer {
 typedef struct USBEndpointTransferInfo {
 	//TODO: figure out what is needed and what isn't
 	//uint32_t endpoint; (probably not needed)
-	uint32_t packetSize;
+	uint32_t maxPacketSize;
 	USBTransferType type;
 	uint32_t token;
-	uint32_t bytesLeft;				// bytes left in current transfer
-	uint32_t packetsLeft;			// packets left in current transfer
+	uint32_t currentPacketSize;
+	uint32_t currentTransferPacketsLeft;
 	//uint32_t unknS5l8900;
 	USBTransfer * currentTransfer;
 	USBTransfer * lastTransfer;
