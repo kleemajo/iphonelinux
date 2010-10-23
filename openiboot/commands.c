@@ -1112,20 +1112,29 @@ void cmd_help(int argc, char** argv) {
 
 OPIBCommand CommandList[] = 
 	{
+#ifndef CONFIG_IPOD2G
 		{"install", "install openiboot onto the device", cmd_install},
 		{"uninstall", "uninstall openiboot from the device", cmd_uninstall},
+#endif
 		{"reboot", "reboot the device", cmd_reboot},
+#ifndef CONFIG_IPOD2G
 		{"poweroff", "power off the device", cmd_poweroff},
+#endif
 		{"echo", "echo back a line", cmd_echo},
+#ifndef CONFIG_IPOD2G
 		{"clear", "clears the screen", cmd_clear},
 		{"text", "turns text display on or off", cmd_text},
+#endif
 		{"md", "display a block of memory as 32-bit integers", cmd_md},
 		{"mw", "write a 32-bit dword into a memory address", cmd_mw},
 		{"mwb", "write a byte into a memory address", cmd_mwb},
 		{"mws", "write a string into a memory address", cmd_mws},
+#ifndef CONFIG_IPOD2G
 		{"aes", "use the hardware crypto engine", cmd_aes},
+#endif
 		{"hexdump", "display a block of memory like 'hexdump -C'", cmd_hexdump},
 		{"cat", "dumps a block of memory", cmd_cat},
+#ifndef CONFIG_IPOD2G
 		{"gpio_pinstate", "get the state of a GPIO pin", cmd_gpio_pinstate},
 		{"gpio_out", "set the state of a GPIO pin", cmd_gpio_out},
 		{"dma", "perform a DMA transfer", cmd_dma},
@@ -1179,8 +1188,10 @@ OPIBCommand CommandList[] =
 		{"pmu_powersupply", "get the power supply type", cmd_pmu_powersupply},
 		{"pmu_charge", "turn on and off the power charger", cmd_pmu_charge},
 		{"pmu_nvram", "list powernvram registers", cmd_pmu_nvram},
+#endif
 		{"malloc_stats", "display malloc stats", cmd_malloc_stats},
 		{"frequency", "display clock frequencies", cmd_frequency},
+#ifndef CONFIG_IPOD2G
 		{"printenv", "list the environment variables in nvram", cmd_printenv},
 		{"setenv", "sets an environment variable", cmd_setenv},
 		{"saveenv", "saves the environment variables in nvram", cmd_saveenv},
@@ -1192,7 +1203,9 @@ OPIBCommand CommandList[] =
 		{"boot", "boot a Linux kernel", cmd_boot},
 		{"go", "jump to a specified address (interrupts disabled)", cmd_go},
 		{"jump", "jump to a specified address (interrupts enabled)", cmd_jump},
+#endif
 		{"version", "display the version string", cmd_version},
+#ifndef CONFIG_IPOD2G
 		{"time", "display the current time according to the RTC", cmd_time},
 		{"wdt", "display the current wdt stats", cmd_wdt},
 		{"audiohw_transfers_done", "display how many times the audio buffer has been played", cmd_audiohw_transfers_done},
@@ -1209,6 +1222,7 @@ OPIBCommand CommandList[] =
 		{"play", "play notes using piezo bytes", cmd_piezo_play},
 #endif
 		{"multitouch_setup", "setup the multitouch chip", cmd_multitouch_setup},
+#endif
 		{"help", "list the available commands", cmd_help},
 		{NULL, NULL}
 	};

@@ -100,7 +100,7 @@ struct USBTransfer {
 	uint8_t * buffer;
 	USBTransferStatus status;
 	uint32_t size;
-	uint32_t bytesSent;
+	uint32_t bytesTransferred;
 	USBEndpointHandler handler;
 	USBTransfer * next;
 };
@@ -288,12 +288,6 @@ typedef void (*USBEnumerateHandler)(USBInterface* interface);
 typedef void (*USBEndpointHandlerOld)(uint32_t token);
 
 int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandlerOld handler, uint32_t token);
-void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType);
-void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
-void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen);
-void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen);
-void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
-USBSpeed usb_get_speed();
 
 /*
 ==================
@@ -305,13 +299,16 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart);
 int usb_start();
 int usb_shutdown();
 
-//int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandler handler, uint32_t token);
-//void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType);
-//void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
-//void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen);
-//void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen);
-//void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen);
-//USBSpeed usb_get_speed();
+void usb_add_endpoint(USBInterface* interface, int endpoint, USBDirection direction, USBTransferType transferType);
+void usb_setup_endpoint(uint8_t endpoint, USBDirection direction, USBTransferType type, int maxPacketSize, int token);
+
+void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
+void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
+void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
+void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
+
+USBSpeed usb_get_speed();
+uint16_t getPacketSizeFromSpeed(void);
 
 USBDeviceDescriptor* usb_get_device_descriptor();
 USBDeviceQualifierDescriptor* usb_get_device_qualifier_descriptor();
