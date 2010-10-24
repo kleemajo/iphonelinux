@@ -228,7 +228,6 @@ void OpenIBootStart() {
 			udelay(1000);
 		}
 #endif
-		//DEBUG: bufferPrintf("Home button: %d, Power button: %d\r\n", gpio_pin_state(0xC01), gpio_pin_state(0xC02));
 		char* command = NULL;
 		CommandQueue* cur;
 		EnterCriticalSection();
@@ -487,7 +486,7 @@ static int setup_devices() {
 	// For scheduling/sleeping niceties
 	timer_setup();
 	event_setup();
-	//wdt_setup();
+	wdt_setup();
 
 	// Other devices
 	usb_shutdown();
@@ -507,10 +506,7 @@ static int setup_openiboot() {
 	mmu_setup();
 	tasks_setup();
 	setup_devices();
-/*
-	// End of reversal
-	while (1) {}
-*/
+
 	LeaveCriticalSection();
 
 #ifndef CONFIG_IPOD2G
