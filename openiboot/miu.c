@@ -8,11 +8,11 @@
 #endif
 
 int miu_setup() {
-	#ifdef CONFIG_IPOD2G
+#ifdef CONFIG_IPOD2G
 	if(POWER_ID_EPOCH(GET_REG(POWER + POWER_ID)) != chipid_get_power_epoch()) {
-	#else
+#else
 	if(POWER_ID_EPOCH(*((uint8_t*)(POWER + POWER_ID))) != 3) {
-	#endif	
+#endif	
 		// Epoch mismatch
 		bufferPrintf("miu: epoch mismatch\r\n");
 		return -1;

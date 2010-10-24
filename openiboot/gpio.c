@@ -31,6 +31,14 @@ GPIOInterruptGroup InterruptGroups[GPIO_NUMINTGROUPS];
 static void gpio_handle_interrupt(uint32_t token);
 
 int gpio_setup() {
+#ifdef CONFIG_IPOD2G
+	// iboot writes to these registers for some reason
+	SET_REG(GPIOIC + 0x70, 0x32);
+	SET_REG(GPIOIC + 0x6C, 3);
+	while (!(GET_REG(GPIOIC + 0x7C) & 0x1));
+	SET_REG(GPIOIC + 0x6C, 2);
+#endif
+
 	int i;
 
 	GPIORegs = (GPIORegisters*) GPIO;
@@ -61,8 +69,9 @@ int gpio_setup() {
 	interrupt_enable(0x01);
 	interrupt_enable(0x00);
 
+#ifndef CONFIG_IPOD2G		// no GPIO clock gate on the S5L8720 apparently
 	clock_gate_switch(GPIO_CLOCKGATE, ON);
-
+#endif
 	return 0;
 }
 
@@ -114,6 +123,11 @@ void gpio_interrupt_disable(uint32_t interrupt)
 
 static void gpio_handle_interrupt(uint32_t token)
 {
+#ifdef CONFIG_IPOD2G
+	// debug
+	bufferPrintf("GPIO Interrupt: %x\r\n", token);
+#endif
+
 	uint32_t statReg = GPIOIC + GPIO_INTSTAT + (0x4 * token);
 
 	int stat;

@@ -5,6 +5,12 @@
 
 // Device
 
+#ifdef CONFIG_IPOD2G
+#define BUTTONS_HOME 0xC01
+#define BUTTONS_HOLD 0xC02
+#define BUTTONS_VOLUP 0x902
+#define BUTTONS_VOLDOWN 0xC00
+#else
 #define BUTTONS_HOME_IPHONE 0x1600
 #define BUTTONS_VOLUP 0x1601
 #define BUTTONS_VOLDOWN 0x1602
@@ -18,6 +24,7 @@
 #else
 #define BUTTONS_HOME BUTTONS_HOME_IPHONE
 #define BUTTONS_HOME_IRQ 0x28
+#endif
 #endif
 
 #define BUTTONS_IIC_STATE 0x4B

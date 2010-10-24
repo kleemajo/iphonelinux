@@ -1223,7 +1223,9 @@ OPIBCommand CommandList[] =
 #ifndef CONFIG_IPOD2G
 		{"install", "install openiboot onto the device", cmd_install},
 		{"uninstall", "uninstall openiboot from the device", cmd_uninstall},
+#endif
 		{"reboot", "reboot the device", cmd_reboot},
+#ifndef CONFIG_IPOD2G
 		{"multitouch_fw_install", "install the multitouch firmware", cmd_multitouch_fw_install},
 		{"nand_erase", "erase a NAND block", cmd_nand_erase},
 		{"nor_read", "read a block of NOR into RAM", cmd_nor_read},

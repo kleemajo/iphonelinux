@@ -23,7 +23,11 @@
 #define GPIO_INTSTAT 0xA0
 #define GPIO_INTEN 0xC0
 #define GPIO_INTTYPE 0xE0
+#ifdef CONFIG_IPOD2G
+#define GPIO_FSEL 0x1E0
+#else
 #define GPIO_FSEL 0x320
+#endif
 
 // Values
 #define GPIO_NUMINTGROUPS 7
@@ -37,7 +41,9 @@
 #define GPIO_FSEL_USHIFT 0
 #define GPIO_FSEL_UMASK 0xF
 
+#ifndef CONFIG_IPOD2G
 #define GPIO_CLOCKGATE 0x2C
+#endif
 
 #endif
 

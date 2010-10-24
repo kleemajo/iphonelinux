@@ -5,6 +5,7 @@
 #include "uart.h"
 #include "usb.h"
 #include "mmu.h"
+#include "buttons.h"
 #include "clock.h"
 #include "timer.h"
 #include "event.h"
@@ -193,8 +194,41 @@ void OpenIBootStart() {
 /*
 	audiohw_postinit();
 */
+
+#ifdef CONFIG_IPOD2G
+	// GPIO demo: show whenever a button is pressed
+	int home_state = gpio_pin_state(BUTTONS_HOME);
+	int hold_state = gpio_pin_state(BUTTONS_HOLD);
+	int volup_state = gpio_pin_state(BUTTONS_VOLUP);
+	int voldown_state = gpio_pin_state(BUTTONS_VOLDOWN);
+#endif
+
 	// Process command queue
 	while(TRUE) {
+#ifdef CONFIG_IPOD2G
+		// GPIO demo: show whenever a button is pressed
+		if (home_state != gpio_pin_state(BUTTONS_HOME)) {
+			home_state = gpio_pin_state(BUTTONS_HOME);
+			bufferPrintf("Home button %s\r\n", home_state ? "pressed" : "released");
+			udelay(1000);
+		}
+		if (hold_state != gpio_pin_state(BUTTONS_HOLD)) {
+			hold_state = gpio_pin_state(BUTTONS_HOLD);
+			bufferPrintf("Hold button %s\r\n", hold_state ? "pressed" : "released");
+			udelay(1000);
+		}
+		if (volup_state != gpio_pin_state(BUTTONS_VOLUP)) {
+			volup_state = gpio_pin_state(BUTTONS_VOLUP);
+			bufferPrintf("Volume up button %s\r\n", !volup_state ? "pressed" : "released");
+			udelay(1000);
+		}
+		if (voldown_state != gpio_pin_state(BUTTONS_VOLDOWN)) {
+			voldown_state = gpio_pin_state(BUTTONS_VOLDOWN);
+			bufferPrintf("Volume down button %s\r\n", !voldown_state ? "pressed" : "released");
+			udelay(1000);
+		}
+#endif
+		//DEBUG: bufferPrintf("Home button: %d, Power button: %d\r\n", gpio_pin_state(0xC01), gpio_pin_state(0xC02));
 		char* command = NULL;
 		CommandQueue* cur;
 		EnterCriticalSection();
@@ -448,9 +482,8 @@ static int setup_devices() {
 
 	// Need interrupts for everything afterwards
 	interrupt_setup();
-/*
 	gpio_setup();
-*/
+
 	// For scheduling/sleeping niceties
 	timer_setup();
 	event_setup();
