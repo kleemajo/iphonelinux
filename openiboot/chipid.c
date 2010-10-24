@@ -16,4 +16,3 @@ unsigned int chipid_get_power_epoch() {
 }
 #endif
 
-

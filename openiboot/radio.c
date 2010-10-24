@@ -7,7 +7,6 @@
 #include "uart.h"
 #include "pmu.h"
 #include "wmcodec.h"
-#include "ultrasn0w.h"
 
 // For the +XDRV stuff, it's usually device,function,arg1,arg2,arg3,...
 // device 4 seems to be the vibrator, device 0 seems to be the speakers,
@@ -24,8 +23,6 @@ static char* response_buf;
 #ifdef CONFIG_3G
 int radio_setup_3g()
 {
-	int res;
-	const char *unlock = NULL;
 	response_buf = malloc(RESPONSE_BUF_SIZE);
 
 	gpio_pulldown_configure(RADIO_BB_PULLDOWN, GPIOPDDown);
@@ -60,40 +57,7 @@ int radio_setup_3g()
 
 	speaker_setup();
 
-	if(!(res = radio_cmd("at+xgendata\r\n", 10)))
-	{
-		bufferPrintf("radio: failed to check version!\r\n");
-		return -1;
-	}
-
-	if(strstr(response_buf, "ICE2_MODEM_04.26.08")) {
-		bufferPrintf("radio: baseband version is 04.26.08\r\n");
-		unlock = ultrasn0w_042608;
-	} else if(strstr(response_buf, "ICE2_MODEM_05.11.07")) {
-		bufferPrintf("radio: baseband version is 05.11.07\r\n");
-		unlock = ultrasn0w_051107;
-	} else if(strstr(response_buf, "ICE2_MODEM_05.12.01")) {
-		bufferPrintf("radio: baseband version is 05.12.01\r\n");
-		unlock = ultrasn0w_051201;
-	} else if(strstr(response_buf, "ICE2_MODEM_05.13.04")) {
-		bufferPrintf("radio: baseband version is 05.13.04\r\n");
-		unlock = ultrasn0w_051304;
-	} else {
-		bufferPrintf("radio: unknown baseband version\n");
-		bufferPrintf("radio: unlock not available\n");
-		return 0;
-	}
-
-	bufferPrintf("radio: sending ultrasn0w unlock string.\r\n");
-	res = radio_cmd(unlock, 10);
-	if (res == TRUE)
-		bufferPrintf("radio: ultrasn0w successful\r\n");
-	else {
-		bufferPrintf("radio: ultrasn0w UNSUCCESSFUL\r\n");
-		bufferPrintf("radio: buffer is %s\r\n", response_buf);
-	}
-
-	return res;
+	return 0;
 }
 #else
 int radio_setup_2g()
@@ -252,41 +216,6 @@ void radio_nvram_list()
 
 		cursor += size;
 	}
-}
-
-void vibrator_loop(int frequency, int period, int timeOn)
-{
-	char buf[100];
-	sprintf(buf, "at+xdrv=4,0,2,%d,%d,%d\r\n", frequency, period, timeOn);
-
-	// write the command
-	radio_write(buf);
-
-	// clear the response
-	radio_read(buf, sizeof(buf));
-}
-
-void vibrator_once(int frequency, int time)
-{
-	char buf[100];
-	sprintf(buf, "at+xdrv=4,0,1,%d,%d,%d\r\n", frequency, time + 1, time);
-
-	// write the command
-	radio_write(buf);
-
-	// clear the response
-	radio_read(buf, sizeof(buf));
-}
-
-void vibrator_off()
-{
-	char buf[100];
-
-	// write the command
-	radio_write("at+xdrv=4,0,0,0,0,0\r\n");
-
-	// clear the response
-	radio_read(buf, sizeof(buf));
 }
 
 int radio_write(const char* str)

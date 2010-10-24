@@ -10,7 +10,6 @@
 #define CHIPID 0x3E500000
 #endif
 
-
 // Registers
 #define SPICLOCKTYPE 0x4
 #ifdef CONFIG_IPOD2G
@@ -25,5 +24,5 @@
 #define CHIPID_GET_POWER_EPOCH(x) (GET_BITS((x), 4, 7) > 3 ? 3 : 4)
 #endif
 
-
 #endif
+

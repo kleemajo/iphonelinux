@@ -17,9 +17,11 @@ int miu_setup() {
 		bufferPrintf("miu: epoch mismatch\r\n");
 		return -1;
 	}
+
 #ifndef CONFIG_IPOD2G
 	clock_set_bottom_bits_38100000(1);
 #endif
+	
 	return 0;
 }
 

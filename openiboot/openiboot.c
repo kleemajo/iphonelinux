@@ -36,16 +36,24 @@
 #include "hfs/bdev.h"
 #include "hfs/fs.h"
 #include "scripting.h"
+#include "actions.h"
 
 #include "radio.h"
 #include "wmcodec.h"
 #include "wdt.h"
 #include "als.h"
+#include "multitouch.h"
+
+int globalFtlHasBeenRestored = 0; 
 
 int received_file_size;
 
 static int setup_devices();
 static int setup_openiboot();
+#ifndef CONFIG_IPOD2G
+static int load_multitouch_images();
+static void reset_tempos();
+#endif
 
 extern uint8_t _binary_payload_bin_start;
 extern uint8_t _binary_payload_bin_end;
@@ -74,14 +82,70 @@ void OpenIBootStart() {
 
 	framebuffer_setdisplaytext(TRUE);
 	framebuffer_clear();
-
+	bufferPrintf("Loading openiBoot...");
 #ifndef SMALL
 #ifndef NO_STBIMAGE
+	int defaultOS = 0;
+	int tempOS = 0;
 	const char* hideMenu = nvram_getvar("opib-hide-menu");
-	if(hideMenu && (strcmp(hideMenu, "1") == 0 || strcmp(hideMenu, "true") == 0)) {
+	const char* sDefaultOS = nvram_getvar("opib-default-os");
+	const char* sTempOS = nvram_getvar("opib-temp-os");
+	if(sDefaultOS)
+		defaultOS = parseNumber(sDefaultOS);
+	if(sTempOS)
+		tempOS = parseNumber(sTempOS);
+	if(tempOS!=defaultOS) {
+				
+		switch (tempOS) {
+			case 0:
+				framebuffer_clear();
+				bufferPrintf("Loading iOS...");
+				reset_tempos(sDefaultOS);
+				Image* image = images_get(fourcc("ibox"));
+				if(image == NULL)
+					image = images_get(fourcc("ibot"));
+				void* imageData;
+				images_read(image, &imageData);
+				chainload((uint32_t)imageData);
+				break;
+			
+			case 1:
+				framebuffer_clear();
+				bufferPrintf("Loading iDroid...");
+				reset_tempos(sDefaultOS);
+#ifndef NO_HFS
+#ifndef CONFIG_IPOD
+				radio_setup();
+#endif
+				nand_setup();
+				fs_setup();
+				if(globalFtlHasBeenRestored) {
+					if(ftl_sync()) {
+						bufferPrintf("ftl synced successfully");
+					} else {
+						bufferPrintf("error syncing ftl");
+					}
+				}	
+				pmu_set_iboot_stage(0);
+				startScripting("linux"); //start script mode if there is a script file
+				boot_linux_from_files();
+#endif
+				break;
+				
+			case 2:
+				framebuffer_clear();
+				bufferPrintf("Loading Console...");
+				reset_tempos(sDefaultOS);
+				hideMenu = "1";
+				break;
+		}
+		
+	} else if(hideMenu && (strcmp(hideMenu, "1") == 0 || strcmp(hideMenu, "true") == 0)) {
 		bufferPrintf("Boot menu hidden. Use 'setenv opib-hide-menu false' and then 'saveenv' to unhide.\r\n");
 	} else {
-		framebuffer_setdisplaytext(FALSE);
+        	framebuffer_setdisplaytext(FALSE);
+        	isMultitouchLoaded = load_multitouch_images();
+		framebuffer_clear();
 		const char* sMenuTimeout = nvram_getvar("opib-menu-timeout");
 		int menuTimeout = -1;
 		if(sMenuTimeout)
@@ -148,6 +212,7 @@ void OpenIBootStart() {
 		}
 	}
 	// should not reach here
+
 }
 
 static uint8_t* controlSendBuffer = NULL;
@@ -400,6 +465,7 @@ static int setup_devices() {
 
 	spi_setup();
 */
+
 	return 0;
 }
 
@@ -427,12 +493,55 @@ static int setup_openiboot() {
 
 	lcd_setup();
 	framebuffer_setup();
-#ifndef CONFIG_IPOD2G
 	audiohw_init();
-
-	camera_setup();
-#endif
 */
+
+    isMultitouchLoaded = 0;
 	return 0;
 }
+
+#ifndef CONFIG_IPOD2G
+static int load_multitouch_images()
+{
+    #ifdef CONFIG_IPHONE
+        Image* image = images_get(fourcc("mtza"));
+        if (image == NULL) {
+            return 0;
+        }
+        void* aspeedData;
+        size_t aspeedLength = images_read(image, &aspeedData);
+        
+        image = images_get(fourcc("mtzm"));
+        if(image == NULL) {
+            return 0;
+        }
+        
+        void* mainData;
+        size_t mainLength = images_read(image, &mainData);
+        
+        multitouch_setup(aspeedData, aspeedLength, mainData,mainLength);
+        free(aspeedData);
+        free(mainData);
+    #else
+        Image* image = images_get(fourcc("mtz2"));
+        if(image == NULL) {
+            return 0;
+        }
+        void* imageData;
+        size_t length = images_read(image, &imageData);
+        
+        multitouch_setup(imageData, length);
+        free(imageData);
+    #endif
+    return 1;
+}
+
+static void reset_tempos(char* sDefaultOS)
+{
+	framebuffer_setdisplaytext(FALSE);
+	nvram_setvar("opib-temp-os",sDefaultOS);
+	nvram_save();
+	framebuffer_setdisplaytext(TRUE);
+}
+#endif
 

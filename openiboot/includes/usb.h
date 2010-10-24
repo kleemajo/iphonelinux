@@ -2,7 +2,7 @@
 #define USB_H
 
 // assigned by USB Org
-#define VENDOR_NETCHIP 0x525		// Used to appear as a non-apple product
+#define VENDOR_NETCHIP 0x525
 #define VENDOR_APPLE 0x5AC
 
 // assigned by Apple

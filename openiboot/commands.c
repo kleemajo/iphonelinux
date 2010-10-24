@@ -28,10 +28,136 @@
 #include "radio.h"
 #include "als.h"
 #include "piezo.h"
+#include "vibrator.h"
+
+void cmd_help(int argc, char** argv) {
+    OPIBCommand* curCommand = CommandList;
+    while(curCommand->name != NULL) {
+        bufferPrintf("%-20s%s\r\n", curCommand->name, curCommand->description);
+        curCommand++;
+    }
+}
+
+void cmd_install(int argc, char** argv) {
+    bufferPrintf("Starting Install/Upgrade...\r\n");
+    images_install(&_start, (uint32_t)&OpenIBootEnd - (uint32_t)&_start);  
+}
+
+void cmd_uninstall(int argc, char** argv) {
+    images_uninstall();
+}
 
 void cmd_reboot(int argc, char** argv) {
 	Reboot();
 }
+
+void cmd_nor_read(int argc, char** argv) {
+    if(argc < 4) {
+        bufferPrintf("Usage: %s <address> <offset> <len>\r\n", argv[0]);
+        return;
+    }
+    
+    uint32_t address = parseNumber(argv[1]);
+    uint32_t offset = parseNumber(argv[2]);
+    uint32_t len = parseNumber(argv[3]);
+    bufferPrintf("Reading 0x%x - 0x%x to 0x%x...\r\n", offset, offset + len, address);
+    nor_read((void*)address, offset, len);
+    bufferPrintf("Done.\r\n");
+}
+
+void cmd_nor_write(int argc, char** argv) {
+	if(argc < 4) {
+		bufferPrintf("Usage: %s <address> <offset> <len>\r\n", argv[0]);
+		return;
+	}
+
+	uint32_t address = parseNumber(argv[1]);
+	uint32_t offset = parseNumber(argv[2]);
+	uint32_t len = parseNumber(argv[3]);
+	bufferPrintf("Writing 0x%x - 0x%x to 0x%x...\r\n", address, address + len, offset);
+	nor_write((void*)address, offset, len);
+	bufferPrintf("Done.\r\n");
+}
+
+void cmd_nand_erase(int argc, char** argv)
+{
+	if(argc < 3) {
+		bufferPrintf("Usage: %s <bank> <block> -- You probably don't want to do this.\r\n", argv[0]);
+		return;
+	}
+
+	uint32_t bank = parseNumber(argv[1]);
+	uint32_t block = parseNumber(argv[2]);
+
+	bufferPrintf("Erasing bank %d, block %d...\r\n", bank, block);
+	bufferPrintf("nand_erase: %d\r\n", nand_erase(bank, block));
+}
+
+
+#ifdef CONFIG_IPHONE
+void cmd_multitouch_fw_install(int argc, char** argv)
+{
+    if(argc < 5)
+    {
+        bufferPrintf("%s <a-speed fw> <a-speed fw len> <main fw> <main fw len>\r\n", argv[0]);
+        return;
+    }
+    
+    uint8_t* aspeedFW = (uint8_t*) parseNumber(argv[1]);
+    uint32_t aspeedFWLen = parseNumber(argv[2]);
+    uint8_t* mainFW = (uint8_t*) parseNumber(argv[3]);
+    uint32_t mainFWLen = parseNumber(argv[4]);
+    
+    //get latest apple image
+    Image* image = images_get_last_apple_image();
+    uint32_t offset = image->offset+image->padded;
+    
+    //write aspeed first
+    if(offset >= 0xfc000 || (offset + aspeedFWLen + mainFWLen) >= 0xfc000) {
+        bufferPrintf("**ABORTED** Image of size %d at 0x%x would overflow NOR!\r\n", aspeedFWLen+mainFWLen, offset);
+        return;
+    }    
+    
+    bufferPrintf("Writing aspeed 0x%x - 0x%x to 0x%x...\r\n", aspeedFW, aspeedFW + aspeedFWLen, offset);
+    nor_write((void*)aspeedFW, offset, aspeedFWLen);
+    
+    offset += aspeedFWLen;
+    
+    bufferPrintf("Writing main 0x%x - 0x%x to 0x%x...\r\n", mainFW, mainFW + mainFWLen, offset);
+    nor_write((void*)mainFW, offset, mainFWLen);
+    
+    bufferPrintf("Zephyr firmware installed.\r\n");
+}
+#else
+void cmd_multitouch_fw_install(int argc, char** argv)
+{
+    if(argc < 3)
+    {
+        bufferPrintf("%s <constructed fw> <constructed fw len>\r\n", argv[0]);
+        return;
+    }
+    
+    uint8_t* fwData = (uint8_t*) parseNumber(argv[1]);
+    uint32_t fwLen = parseNumber(argv[2]);
+    
+    //get latest apple image
+    Image* image = images_get_last_apple_image();
+    if (image == NULL) {
+        bufferPrintf("**ABORTED** Last image position cannot be read\r\n");
+        return;
+    }
+    uint32_t offset = image->offset+image->padded;
+    
+    if(offset >= 0xfc000 || (offset + fwLen) >= 0xfc000) {
+        bufferPrintf("**ABORTED** Image of size %d at %x would overflow NOR!\r\n", fwLen, offset);
+        return;
+    }    
+    
+    bufferPrintf("Writing 0x%x - 0x%x to 0x%x...\r\n", fwData, fwData + fwLen, offset);
+    nor_write((void*)fwData, offset, fwLen);
+    bufferPrintf("Zephyr2 firmware installed.\r\n");
+}
+#endif
 
 void cmd_poweroff(int argc, char** argv) {
 	pmu_poweroff();
@@ -136,34 +262,6 @@ void cmd_cat(int argc, char** argv) {
 	uint32_t address = parseNumber(argv[1]);
 	uint32_t len = parseNumber(argv[2]);
 	addToBuffer((char*) address, len);
-}
-
-void cmd_nor_read(int argc, char** argv) {
-	if(argc < 4) {
-		bufferPrintf("Usage: %s <address> <offset> <len>\r\n", argv[0]);
-		return;
-	}
-
-	uint32_t address = parseNumber(argv[1]);
-	uint32_t offset = parseNumber(argv[2]);
-	uint32_t len = parseNumber(argv[3]);
-	bufferPrintf("Reading 0x%x - 0x%x to 0x%x...\r\n", offset, offset + len, address);
-	nor_read((void*)address, offset, len);
-	bufferPrintf("Done.\r\n");
-}
-
-void cmd_nor_write(int argc, char** argv) {
-	if(argc < 4) {
-		bufferPrintf("Usage: %s <address> <offset> <len>\r\n", argv[0]);
-		return;
-	}
-
-	uint32_t address = parseNumber(argv[1]);
-	uint32_t offset = parseNumber(argv[2]);
-	uint32_t len = parseNumber(argv[3]);
-	bufferPrintf("Writing 0x%x - 0x%x to 0x%x...\r\n", address, address + len, offset);
-	nor_write((void*)address, offset, len);
-	bufferPrintf("Done.\r\n");
 }
 
 void cmd_nor_erase(int argc, char** argv) {
@@ -408,16 +506,6 @@ void cmd_saveenv(int argc, char** argv) {
 	bufferPrintf("Environment saved\r\n");
 }
 
-void cmd_install(int argc, char** argv) {
-	bufferPrintf("Installing Images...\r\n");
-	images_install(&_start, (uint32_t)&OpenIBootEnd - (uint32_t)&_start);
-	bufferPrintf("Images installed\r\n");
-}
-
-void cmd_uninstall(int argc, char** argv) {
-	images_uninstall();
-}
-
 void cmd_pmu_voltage(int argc, char** argv) {
 	bufferPrintf("battery voltage: %d mV\r\n", pmu_get_battery_voltage());
 }
@@ -501,20 +589,6 @@ void cmd_dma(int argc, char** argv) {
 	bufferPrintf("dma_request: %d\r\n", dma_request(DMA_MEMORY, 4, 8, DMA_MEMORY, 4, 8, &controller, &channel, NULL));
 	bufferPrintf("dma_perform(controller: %d, channel %d): %d\r\n", controller, channel, dma_perform(source, dest, size, FALSE, &controller, &channel));
 	bufferPrintf("dma_finish(controller: %d, channel %d): %d\r\n", controller, channel, dma_finish(controller, channel, 500));
-}
-
-void cmd_nand_erase(int argc, char** argv)
-{
-	if(argc < 3) {
-		bufferPrintf("Usage: %s <bank> <block> -- You probably don't want to do this.\r\n", argv[0]);
-		return;
-	}
-
-	uint32_t bank = parseNumber(argv[1]);
-	uint32_t block = parseNumber(argv[2]);
-
-	bufferPrintf("Erasing bank %d, block %d...\r\n", bank, block);
-	bufferPrintf("nand_erase: %d\r\n", nand_erase(bank, block));
 }
 
 void cmd_nand_read(int argc, char** argv) {
@@ -1030,6 +1104,7 @@ void cmd_radio_hangup(int argc, char** argv) {
 	radio_hangup(argv[1]);
 }
 
+#ifdef CONFIG_IPHONE
 void cmd_vibrator_loop(int argc, char** argv)
 {
 	if(argc < 4) {
@@ -1068,6 +1143,45 @@ void cmd_vibrator_off(int argc, char** argv)
 	vibrator_off();
 }
 #endif
+#ifdef CONFIG_3G
+void cmd_vibrator_loop(int argc, char** argv)
+{
+	if(argc < 3) {
+		bufferPrintf("Usage: %s <frequency 1-12000000> <duty time in percent> <time vibrator on in ms>\r\n", argv[0]);
+		return;
+	}
+
+	int frequency = parseNumber(argv[1]);
+	int period = parseNumber(argv[2]);
+	int time = parseNumber(argv[3]) * 1000;
+
+	bufferPrintf("Turning on vibrator at frequency %d with %d percent duty time for %d microseconds.\r\n", frequency, period, time);
+
+	vibrator_loop(frequency, period, time);
+}
+
+void cmd_vibrator_once(int argc, char** argv)
+{
+	if(argc < 2) {
+		bufferPrintf("Usage: %s <duration in ms>\r\n", argv[0]);
+		return;
+	}
+
+	int time = parseNumber(argv[1]) * 1000;
+
+	bufferPrintf("Turning on vibrator for %d microseconds.\r\n", time);
+
+	vibrator_once(time);
+}
+
+void cmd_vibrator_off(int argc, char** argv)
+{
+	bufferPrintf("Turning off vibrator.\r\n");
+
+	vibrator_off();
+}
+#endif
+#endif
 
 #ifdef CONFIG_IPOD
 void cmd_piezo_buzz(int argc, char** argv) {
@@ -1104,22 +1218,18 @@ void cmd_piezo_play(int argc, char** argv) {
 }
 
 #endif
-
-void cmd_help(int argc, char** argv) {
-	OPIBCommand* curCommand = CommandList;
-	while(curCommand->name != NULL) {
-		bufferPrintf("%-20s%s\r\n", curCommand->name, curCommand->description);
-		curCommand++;
-	}
-}
-
 OPIBCommand CommandList[] = 
 	{
 #ifndef CONFIG_IPOD2G
 		{"install", "install openiboot onto the device", cmd_install},
 		{"uninstall", "uninstall openiboot from the device", cmd_uninstall},
-#endif
 		{"reboot", "reboot the device", cmd_reboot},
+		{"multitouch_fw_install", "install the multitouch firmware", cmd_multitouch_fw_install},
+		{"nand_erase", "erase a NAND block", cmd_nand_erase},
+		{"nor_read", "read a block of NOR into RAM", cmd_nor_read},
+		{"nor_write", "write RAM into NOR", cmd_nor_write},
+#endif
+		{"help", "list the available commands", cmd_help},
 #ifndef CONFIG_IPOD2G
 		{"poweroff", "power off the device", cmd_poweroff},
 #endif
@@ -1146,7 +1256,6 @@ OPIBCommand CommandList[] =
 		{"nand_read_spare", "read a page of NAND's spare into RAM", cmd_nand_read_spare},
 		{"nand_status", "read NAND status", cmd_nand_status},
 		{"nand_ecc", "hardware ECC a page", cmd_nand_ecc},
-		{"nand_erase", "erase a NAND block", cmd_nand_erase},
 		{"vfl_read", "read a page of VFL into RAM", cmd_vfl_read},
 		{"vfl_erase", "erase a block of VFL", cmd_vfl_erase},
 		{"ftl_read", "read a page of FTL into RAM", cmd_ftl_read},
@@ -1159,8 +1268,6 @@ OPIBCommand CommandList[] =
 		{"fs_extract", "extract a file into memory", fs_cmd_extract},
 		{"fs_add", "store a file from memory", fs_cmd_add},
 #endif
-		{"nor_read", "read a block of NOR into RAM", cmd_nor_read},
-		{"nor_write", "write RAM into NOR", cmd_nor_write},
 		{"nor_erase", "erase a block of NOR", cmd_nor_erase},
 		{"iic_read", "read a IIC register", cmd_iic_read},
 		{"iic_write", "write a IIC register", cmd_iic_write},
@@ -1224,8 +1331,7 @@ OPIBCommand CommandList[] =
 		{"buzz", "use the piezo buzzer", cmd_piezo_buzz},
 		{"play", "play notes using piezo bytes", cmd_piezo_play},
 #endif
-		{"multitouch_setup", "setup the multitouch chip", cmd_multitouch_setup},
-#endif
-		{"help", "list the available commands", cmd_help},
+		{"multitouch_setup", "set up the multitouch chip", cmd_multitouch_setup},		
+#endif		
 		{NULL, NULL}
 	};

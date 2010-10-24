@@ -11,11 +11,11 @@ HFS_SRC_C           = hfs/btree.c hfs/catalog.c hfs/extents.c hfs/fastunicodecom
 MENU_SRC_C          = menu.c stb_image.c
 
 ifeq ($(PLATFORM),IPHONE)
-	SRC_C          += camera.c radio.c als.c multitouch.c wm8958.c
+	SRC_C          += camera.c radio.c als.c multitouch.c wm8958.c vibrator.c
 endif
 
 ifeq ($(PLATFORM),3G)
-	SRC_C          += camera.c radio.c alsISL29003.c multitouch-z2.c wm8991.c
+	SRC_C          += camera.c radio.c alsISL29003.c multitouch-z2.c wm8991.c vibrator.c
 endif
 
 ifeq ($(PLATFORM),IPOD)
@@ -42,7 +42,7 @@ LIBRARIES          += -lgcc -nostdlib
 INC                += -Iincludes
 CFLAGS             += -Wall -Werror
 LDFLAGS            += -Ttext=$(LOAD) --nostdlib
-VERSION             = "0.1"
+VERSION             = "0.1.2"
 COMMIT              = $(shell git log | head -n1 | cut -b8-14)
 BUILD               = "$(COMMIT)"
 CFLAGS             += -DOPENIBOOT_VERSION=$(VERSION) -DOPENIBOOT_VERSION_BUILD=$(BUILD)

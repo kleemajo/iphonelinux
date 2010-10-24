@@ -190,7 +190,7 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 	interrupt_install(USB_INTERRUPT, usbIRQHandler, 0);
 
 	usb_start();
-	
+
 	interrupt_enable(USB_INTERRUPT);
 
 	usb_inited = TRUE;
@@ -232,7 +232,7 @@ int usb_start(void) {
 	SET_REG(USB + DIEPMSK, USB_EPINT_NONE);
 	SET_REG(USB + DAINT, DAINT_ALL);
 	SET_REG(USB + DAINTMSK, DAINTMSK_NONE);
-	
+
 	// set up endpoints
 	int i;	
 	for(i = 0; i < USB_NUM_ENDPOINTS; i++) {
@@ -241,7 +241,7 @@ int usb_start(void) {
 		OutEPRegs[i].interrupt = USB_EPINT_SetUp | USB_EPINT_AHBErr | USB_EPINT_EPDisbld
 			| USB_EPINT_XferCompl;
 	}
-	
+
 	// enable the first interrupts that we will respond to
 	SET_REG(USB + GINTMSK, GINTMSK_RESET | GINTMSK_ENUMDONE);
 
@@ -398,7 +398,7 @@ static void usbIRQHandler(uint32_t token) {
 			bufferPrintf("usb: reset detected\r\n");
 			change_state(USBPowered);
 		}
-		
+
 		int retval = resetUSB();
 
 		if(retval) {
@@ -416,12 +416,12 @@ static void usbIRQHandler(uint32_t token) {
 		uint32_t daint_status = GET_REG(USB + DAINT);
 		if (daint_status != DAINT_NONE) {
 			// aha, got something on one of the endpoints. Now the real fun begins
-			
+
 			// control endpoint in
 			if (daint_status & ((1 << USB_CONTROLEP) << DAINTMSK_IN_SHIFT)) {
 				handleEndpointInInterrupt(USB_CONTROLEP);
 			}
-			
+
 			// control endpoint out
 			if (daint_status & ((1 << USB_CONTROLEP) << DAINTMSK_OUT_SHIFT)) {
 				uint32_t control_ep_out_status = OutEPRegs[USB_CONTROLEP].interrupt;
@@ -447,7 +447,7 @@ static void usbIRQHandler(uint32_t token) {
 					receiveControl();
 				}
 			}
-			
+
 			// check for interrupts on the non-control endpoints
 			int endpoint;
 			for (endpoint = 1; endpoint < USB_NUM_ENDPOINTS; endpoint++) {
@@ -517,7 +517,7 @@ static void processSetupPacket(void) {
 							sendControl(controlSendBuffer, length);
 						}
 					}
-					
+
 					break;
 
 				case USB_GET_STATUS:
@@ -552,7 +552,7 @@ static void processSetupPacket(void) {
 					// send an acknowledgement
 					sendControl(NULL, 0);
 					break;
-				
+
 				case USB_GET_CONFIGURATION:
 					// we only use configuration 0
 					*controlSendBuffer = '0';
@@ -896,7 +896,7 @@ static void disableEndpointIn(uint8_t endpoint) {
 		} else {
 			packetsSent = USB_EPXFERSZ_PKTCNT(InEPRegs[endpoint].transferSize);
 		}
-		
+
 		// discard anything remaining in the current transfer for the endpoint
 		if (packetsSent) {
 			endpointTransferInfos[endpoint].in.currentTransfer->bytesTransferred +=
@@ -924,7 +924,7 @@ static void setStall(uint8_t endpoint, USBDirection direction, OnOff onoff) {
 	if (endpoint >= USB_NUM_ENDPOINTS) {
 		return;
 	}
-	
+
 	if (onoff == ON) {
 		// set the stall bit for the endpoint
 		if (direction == USBIn) {
@@ -1028,7 +1028,7 @@ void usb_setup_endpoint(uint8_t endpoint, USBDirection direction, USBTransferTyp
 	endpointTransferInfo->maxPacketSize = maxPacketSize;
 	endpointTransferInfo->type = type;
 	endpointTransferInfo->token = token;
-	
+
 	if (type == USBBulk || type == USBInterrupt) {
 		volatile uint32_t * controlReg;
 		uint32_t txFifo = 0;
@@ -1104,7 +1104,7 @@ static void send(uint8_t endpoint) {
 
 static void receive(uint8_t endpoint) {
 	USBTransfer * transfer = endpointTransferInfos[endpoint].out.currentTransfer;
-	
+
 	uint32_t packetSize = transfer->size - transfer->bytesTransferred;
 	if (packetSize > hwMaxPacketSize) {
 		packetSize = hwMaxPacketSize;
@@ -1113,7 +1113,7 @@ static void receive(uint8_t endpoint) {
 	CleanAndInvalidateCPUDataCache();
 
 	OutEPRegs[endpoint].dmaAddress = transfer->buffer + transfer->bytesTransferred;
-	
+
 	uint32_t maxPacketSize = endpointTransferInfos[endpoint].out.maxPacketSize;
 	uint32_t packetCount;
 	if (packetSize == 0) {
@@ -1253,7 +1253,7 @@ static void handleEndpointTransferCompleted(uint8_t endpoint, USBDirection direc
 	} else {
 		endpointInfo = &(endpointTransferInfos[endpoint].out);
 	}
-	
+
 	endpointInfo->currentTransferPacketsLeft = 0;
 	endpointInfo->currentPacketSize = 0;
 	USBTransfer * completedTransfer = endpointInfo->currentTransfer;
@@ -1276,6 +1276,7 @@ static void handleEndpointTransferCompleted(uint8_t endpoint, USBDirection direc
 	completedTransfer->status = USBTransferSuccess;
 	handleTransferCompleted(completedTransfer);
 }
+
 
 
 

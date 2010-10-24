@@ -23,8 +23,9 @@
 #include "hfs/fs.h"
 #include "ftl.h"
 #include "scripting.h"
+#include "multitouch.h"
 
-int globalFtlHasBeenRestored = 0; /* global variable to tell wether a ftl_restore has been done*/
+int globalFtlHasBeenRestored; /* global variable to tell wether a ftl_restore has been done*/
 
 static uint32_t FBWidth;
 static uint32_t FBHeight;
@@ -43,7 +44,6 @@ static int imgConsoleX;
 static int imgConsoleY;
 
 static uint32_t* imgAndroidOS;
-static uint32_t* imgAndroidOS_unblended;
 static int imgAndroidOSWidth;
 static int imgAndroidOSHeight;
 static int imgAndroidOSX;
@@ -52,7 +52,6 @@ static int imgAndroidOSY;
 static uint32_t* imgiPhoneOSSelected;
 static uint32_t* imgConsoleSelected;
 static uint32_t* imgAndroidOSSelected;
-static uint32_t* imgAndroidOSSelected_unblended;
 
 static uint32_t* imgHeader;
 static int imgHeaderWidth;
@@ -98,6 +97,30 @@ static void drawSelectionBox() {
 	lcd_window_address(2, (uint32_t) CurFramebuffer);
 }
 
+static int touch_watcher()
+{
+    uint8_t isFound = 0;
+    multitouch_run();
+    if (multitouch_ispoint_inside_region(imgiPhoneOSX, imgiPhoneOSY, imgiPhoneOSWidth, imgiPhoneOSHeight) == TRUE) {
+        Selection = MenuSelectioniPhoneOS;
+        isFound = 1;
+    }
+    else if (multitouch_ispoint_inside_region(imgConsoleX, imgConsoleY, imgConsoleWidth, imgConsoleHeight) == TRUE) {
+        Selection = MenuSelectionConsole;
+        isFound = 1;
+    }
+    else if (multitouch_ispoint_inside_region(imgAndroidOSX, imgAndroidOSY, imgAndroidOSWidth, imgAndroidOSHeight) == TRUE) {
+        Selection = MenuSelectionAndroidOS;
+        isFound = 1;
+    }
+    
+    if (isFound ==1) {
+        drawSelectionBox();
+        return TRUE;
+    }
+    return FALSE;
+}
+
 static void toggle(int forward) {
 	if(forward)
 	{
@@ -120,7 +143,7 @@ static void toggle(int forward) {
 	drawSelectionBox();
 }
 
-int menu_setup(int timeout) {
+int menu_setup(int timeout, int defaultOS) {
 	FBWidth = currentWindow->framebuffer.width;
 	FBHeight = currentWindow->framebuffer.height;	
 
@@ -128,8 +151,8 @@ int menu_setup(int timeout) {
 	imgiPhoneOSSelected = framebuffer_load_image(dataiPhoneOSSelectedPNG, dataiPhoneOSSelectedPNG_size, &imgiPhoneOSWidth, &imgiPhoneOSHeight, TRUE);
 	imgConsole = framebuffer_load_image(dataConsolePNG, dataConsolePNG_size, &imgConsoleWidth, &imgConsoleHeight, TRUE);
 	imgConsoleSelected = framebuffer_load_image(dataConsoleSelectedPNG, dataConsoleSelectedPNG_size, &imgConsoleWidth, &imgConsoleHeight, TRUE);
-	imgAndroidOS_unblended = framebuffer_load_image(dataAndroidOSPNG, dataAndroidOSPNG_size, &imgAndroidOSWidth, &imgAndroidOSHeight, TRUE);
-	imgAndroidOSSelected_unblended = framebuffer_load_image(dataAndroidOSSelectedPNG, dataAndroidOSSelectedPNG_size, &imgAndroidOSWidth, &imgAndroidOSHeight, TRUE);
+	imgAndroidOS = framebuffer_load_image(dataAndroidOSPNG, dataAndroidOSPNG_size, &imgAndroidOSWidth, &imgAndroidOSHeight, TRUE);
+	imgAndroidOSSelected = framebuffer_load_image(dataAndroidOSSelectedPNG, dataAndroidOSSelectedPNG_size, &imgAndroidOSWidth, &imgAndroidOSHeight, TRUE);
 	imgHeader = framebuffer_load_image(dataHeaderPNG, dataHeaderPNG_size, &imgHeaderWidth, &imgHeaderHeight, TRUE);
 
 	bufferPrintf("menu: images loaded\r\n");
@@ -148,25 +171,24 @@ int menu_setup(int timeout) {
 
 	framebuffer_draw_image(imgHeader, imgHeaderX, imgHeaderY, imgHeaderWidth, imgHeaderHeight);
 
-	framebuffer_draw_rect_hgradient(0, 42, 0, 360, FBWidth, (FBHeight - 12) - 360);
-	framebuffer_draw_rect_hgradient(0x22, 0x22, 0, FBHeight - 12, FBWidth, 12);
-
 	framebuffer_setloc(0, 47);
-	framebuffer_setcolors(COLOR_WHITE, 0x222222);
-	framebuffer_print_force(OPENIBOOT_VERSION_STR);
 	framebuffer_setcolors(COLOR_WHITE, COLOR_BLACK);
+	framebuffer_print_force(OPENIBOOT_VERSION_STR);
 	framebuffer_setloc(0, 0);
 
-	imgAndroidOS = malloc(imgAndroidOSWidth * imgAndroidOSHeight * sizeof(uint32_t));
-	imgAndroidOSSelected = malloc(imgAndroidOSWidth * imgAndroidOSHeight * sizeof(uint32_t));
-
-	framebuffer_capture_image(imgAndroidOS, imgAndroidOSX, imgAndroidOSY, imgAndroidOSWidth, imgAndroidOSHeight);
-	framebuffer_capture_image(imgAndroidOSSelected, imgAndroidOSX, imgAndroidOSY, imgAndroidOSWidth, imgAndroidOSHeight);
-
-	framebuffer_blend_image(imgAndroidOS, imgAndroidOSWidth, imgAndroidOSHeight, imgAndroidOS_unblended, imgAndroidOSWidth, imgAndroidOSHeight, 0, 0);
-	framebuffer_blend_image(imgAndroidOSSelected, imgAndroidOSWidth, imgAndroidOSHeight, imgAndroidOSSelected_unblended, imgAndroidOSWidth, imgAndroidOSHeight, 0, 0);
-
-	Selection = MenuSelectioniPhoneOS;
+	switch(defaultOS){
+		case 0:
+			Selection = MenuSelectioniPhoneOS;
+			break;
+		case 1:
+			Selection = MenuSelectionAndroidOS;
+			break;
+		case 2:
+			Selection = MenuSelectionConsole;
+			break;
+		default:
+			Selection = MenuSelectioniPhoneOS;
+	}
 
 	OtherFramebuffer = CurFramebuffer;
 	CurFramebuffer = (volatile uint32_t*) NextFramebuffer;
@@ -178,25 +200,50 @@ int menu_setup(int timeout) {
 	memcpy((void*)NextFramebuffer, (void*) CurFramebuffer, NextFramebuffer - (uint32_t)CurFramebuffer);
 
 	uint64_t startTime = timer_get_system_microtime();
+	int timeoutLeft = (timeout / 1000);
 	while(TRUE) {
+		char timeoutstr[4] = "";
+		if(timeout > 0){
+			sprintf(timeoutstr, "%2d", timeoutLeft);
+			uint64_t checkTime = timer_get_system_microtime();
+			timeoutLeft = (timeout - ((checkTime - startTime)/1000))/1000;
+			framebuffer_setloc(49, 47);
+			framebuffer_print_force(timeoutstr);
+			framebuffer_setloc(0,0);
+			drawSelectionBox();
+		} else if(timeout == -1) {
+			timeoutLeft = -1;
+			sprintf(timeoutstr, "  ");
+			framebuffer_setloc(49, 47);
+			framebuffer_print_force(timeoutstr);
+			framebuffer_setloc(0,0);
+			drawSelectionBox();
+		}
+		if (isMultitouchLoaded && touch_watcher()) {
+			break;
+        	}
 		if(buttons_is_pushed(BUTTONS_HOLD)) {
 			toggle(TRUE);
 			startTime = timer_get_system_microtime();
+			timeout = -1;
 			udelay(200000);
 		}
 #ifndef CONFIG_IPOD
 		if(!buttons_is_pushed(BUTTONS_VOLUP)) {
 			toggle(FALSE);
 			startTime = timer_get_system_microtime();
+			timeout = -1;
 			udelay(200000);
 		}
 		if(!buttons_is_pushed(BUTTONS_VOLDOWN)) {
 			toggle(TRUE);
 			startTime = timer_get_system_microtime();
+			timeout = -1;
 			udelay(200000);
 		}
 #endif
 		if(buttons_is_pushed(BUTTONS_HOME)) {
+			timeout = -1;
 			break;
 		}
 		if(timeout > 0 && has_elapsed(startTime, (uint64_t)timeout * 1000)) {
@@ -269,3 +316,4 @@ int menu_setup(int timeout) {
 
 #endif
 #endif
+

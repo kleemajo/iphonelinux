@@ -11,7 +11,7 @@ int power_setup() {
 	SET_REG(POWER + POWER_CONFIG2, POWER_CONFIG2_RESET);
 	SET_REG(POWER + POWER_CONFIG3, get_base_frequency() / POWER_CONFIG3_RESET_DIVIDER);
 #else
-		// Deprecated in 2.x
+	// Deprecated in 2.x
 #if 0
 	SET_REG(POWER + POWER_CONFIG0, POWER_CONFIG0_RESET);
 	SET_REG(POWER + POWER_CONFIG1, POWER_CONFIG1_RESET);
@@ -24,7 +24,7 @@ int power_setup() {
 	/* wait for the new state to take effect */
 	while((GET_REG(POWER + POWER_SETSTATE) & toReset) != (GET_REG(POWER + POWER_STATE) & toReset));
 #endif
-#endif	
+#endif
 	return 0;
 }
 

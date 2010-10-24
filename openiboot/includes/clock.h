@@ -40,9 +40,9 @@ typedef enum FrequencyBase {
 	FrequencyBaseDisplay,
 	FrequencyBaseFixed,
 	FrequencyBaseTimebase,
-	#ifdef CONFIG_IPOD2G
+#ifdef CONFIG_IPOD2G
 	FrequencyBaseUsbPhy,
-	#endif
+#endif
 } FrequencyBase;
 
 int clock_setup();
@@ -50,9 +50,9 @@ void clock_gate_switch(uint32_t gate, OnOff on_off);
 uint32_t clock_get_frequency(FrequencyBase freqBase);
 
 // Processor specific functions
-#ifdef CONFIG_IPOD2G		// S5L8720
+#ifdef CONFIG_IPOD2G    // S5L8720
 unsigned int get_base_frequency(void);
-#else						// S5L8900
+#else                   // S5L8900
 int clock_set_bottom_bits_38100000(Clock0ConfigCode code);
 void clock_set_sdiv(int sdiv);
 uint32_t clock_calculate_frequency(uint32_t pdiv, uint32_t mdiv, FrequencyBase freqBase);
