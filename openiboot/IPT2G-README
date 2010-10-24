@@ -4,7 +4,6 @@ Please note, this software is extremely alpha and currently only makes the devic
 
 Also, for those interested in helping out, here's a TODO for what's remaining:
 
- * Reverse and Verify the information in includes/hardware/clock1.h is correct.. Then we'll have interrupts and USB :D
  * Port GPIO driver
  * Verify SPI and NOR work.. They're the same as the iphone2g, so they should.. but just verify it :)
  * Port LCD Driver (I'll probably have to do this one.. I have some good info already)

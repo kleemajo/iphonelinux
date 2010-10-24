@@ -67,14 +67,14 @@ typedef enum USBUsageType {
 } USBUsageType;
 
 enum USBDescriptorType {
-	USBDeviceDescriptorType						= 1,
-	USBConfigurationDescriptorType				= 2,
-	USBStringDescriptorType						= 3,
-	USBInterfaceDescriptorType					= 4,
-	USBEndpointDescriptorType					= 5,
-	USBDeviceQualifierDescriptorType			= 6,
-	USBOtherSpeedConfigurationDescriptorType	= 7,
-	USBInterfacePowerDescriptorType				= 8,
+	USBDeviceDescriptorType = 1,
+	USBConfigurationDescriptorType = 2,
+	USBStringDescriptorType = 3,
+	USBInterfaceDescriptorType = 4,
+	USBEndpointDescriptorType = 5,
+	USBDeviceQualifierDescriptorType = 6,
+	USBOtherSpeedConfigurationDescriptorType = 7,
+	USBInterfacePowerDescriptorType = 8,
 };
 
 typedef enum USBSpeed {
@@ -89,14 +89,11 @@ typedef enum USBTransferStatus {
 	USBTransferFailed = 1,
 } USBTransferStatus;
 
-// This typedef needs to be here for the function typdef below to compile
 typedef struct USBTransfer USBTransfer;
 
 typedef void (*USBEndpointHandler)(USBTransfer * transfer);
 
 struct USBTransfer {
-	//TODO: figure out what is needed and what isn't
-	//uint32_t endpoint;
 	uint8_t * buffer;
 	USBTransferStatus status;
 	uint32_t size;
@@ -106,14 +103,11 @@ struct USBTransfer {
 };
 
 typedef struct USBEndpointTransferInfo {
-	//TODO: figure out what is needed and what isn't
-	//uint32_t endpoint; (probably not needed)
 	uint32_t maxPacketSize;
 	USBTransferType type;
 	uint32_t token;
 	uint32_t currentPacketSize;
 	uint32_t currentTransferPacketsLeft;
-	//uint32_t unknS5l8900;
 	USBTransfer * currentTransfer;
 	USBTransfer * lastTransfer;
 	uint32_t txFifo;		// Note: 1-based due to hardware setup
@@ -226,17 +220,6 @@ typedef struct USBSetupPacket {
 	uint16_t wLength;
 } __attribute__ ((__packed__)) USBSetupPacket;
 
-/*
-typedef struct RingBuffer {
-	int8_t* writePtr;
-	int8_t* readPtr;
-	uint32_t count;
-	uint32_t size;
-	int8_t* bufferStart;
-	int8_t* bufferEnd;
-} RingBuffer;
-*/
-
 #define OPENIBOOTCMD_DUMPBUFFER 0
 #define OPENIBOOTCMD_DUMPBUFFER_LEN 1
 #define OPENIBOOTCMD_DUMPBUFFER_GOAHEAD 2
@@ -252,48 +235,32 @@ typedef struct OpenIBootCmd {
 #define USBSetupPacketRequestTypeType(x) GET_BITS(x, 5, 2)
 #define USBSetupPacketRequestTypeRecpient(x) GET_BITS(x, 0, 5)
 
-#define USBSetupPacketHostToDevice 			0
-#define USBSetupPacketDeviceToHost 			1
+#define USBSetupPacketHostToDevice 0
+#define USBSetupPacketDeviceToHost 1
 
-#define USBSetupPacketStandard 				0
-#define USBSetupPacketClass 				1
-#define USBSetupPacketVendor				2
+#define USBSetupPacketStandard 0
+#define USBSetupPacketClass 1
+#define USBSetupPacketVendor 2
 
-#define USBSetupPacketRecipientDevice		0
-#define USBSetupPacketRecipientInterface	1
-#define USBSetupPacketRecipientEndpoint		2
-#define USBSetupPacketRecipientOther		3
+#define USBSetupPacketRecipientDevice 0
+#define USBSetupPacketRecipientInterface 1
+#define USBSetupPacketRecipientEndpoint 2
+#define USBSetupPacketRecipientOther 3
 
-#define USB_GET_STATUS 			0
-#define USB_CLEAR_FEATURE 		1
-#define USB_SET_FEATURE			3
-#define USB_SET_ADDRESS 		5
-#define USB_GET_DESCRIPTOR		6
-#define USB_SET_DESCRIPTOR		7
-#define USB_GET_CONFIGURATION	8
-#define USB_SET_CONFIGURATION	9
-#define USB_GET_INTERFACE		10
-#define USB_SET_INTERFACE		11
-#define USB_SYNCH_FRAME			12
-
-
-/*
-==================
-TODO: temporary stuff to make code compile! needs removal
-==================
-*/
+#define USB_GET_STATUS 0
+#define USB_CLEAR_FEATURE 1
+#define USB_SET_FEATURE 3
+#define USB_SET_ADDRESS 5
+#define USB_GET_DESCRIPTOR 6
+#define USB_SET_DESCRIPTOR 7
+#define USB_GET_CONFIGURATION 8
+#define USB_SET_CONFIGURATION 9
+#define USB_GET_INTERFACE 10
+#define USB_SET_INTERFACE 11
+#define USB_SYNCH_FRAME 12
 
 typedef void (*USBStartHandler)(void);
 typedef void (*USBEnumerateHandler)(USBInterface* interface);
-typedef void (*USBEndpointHandlerOld)(uint32_t token);
-
-int usb_install_ep_handler(int endpoint, USBDirection direction, USBEndpointHandlerOld handler, uint32_t token);
-
-/*
-==================
-end of temporary stuff
-==================
-*/
 
 int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart);
 int usb_start();

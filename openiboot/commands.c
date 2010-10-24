@@ -705,6 +705,9 @@ void cmd_frequency(int argc, char** argv) {
 	bufferPrintf("Display frequency: %d Hz\r\n", clock_get_frequency(FrequencyBaseDisplay));
 	bufferPrintf("Fixed frequency: %d Hz\r\n", clock_get_frequency(FrequencyBaseFixed));
 	bufferPrintf("Timebase frequency: %d Hz\r\n", clock_get_frequency(FrequencyBaseTimebase));
+#ifdef CONFIG_IPOD2G
+	bufferPrintf("UsbPhy frequency: %d Hz\r\n", clock_get_frequency(FrequencyBaseUsbPhy));
+#endif
 }
 
 void cmd_ftl_mapping(int argc, char** argv) {
