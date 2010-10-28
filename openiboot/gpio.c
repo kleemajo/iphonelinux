@@ -125,7 +125,8 @@ static void gpio_handle_interrupt(uint32_t token)
 {
 #ifdef CONFIG_IPOD2G
 	// debug
-	bufferPrintf("GPIO Interrupt: %x\r\n", token);
+//	Reboot();
+//	bufferPrintf("GPIO Interrupt: %x\r\n", token);
 #endif
 
 	uint32_t statReg = GPIOIC + GPIO_INTSTAT + (0x4 * token);

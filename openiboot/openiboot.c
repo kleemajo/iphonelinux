@@ -45,6 +45,9 @@
 #include "als.h"
 #include "multitouch.h"
 
+//DEBUG
+#include "includes/hardware/gpio.h"
+
 int globalFtlHasBeenRestored = 0; 
 
 int received_file_size;
@@ -75,6 +78,24 @@ typedef struct CommandQueue {
 CommandQueue* commandQueue = NULL;
 
 static void startUSB();
+
+static void gpio_test_handler(uint32_t token) {
+	switch(token) {
+		case 0:
+			bufferPrintf("Hold button changed state!\r\n");
+			break;
+		case 1:
+			bufferPrintf("Home button changed state!\r\n");
+			break;
+		case 2:
+			bufferPrintf("Volume up button changed state!\r\n");
+			break;
+		case 3:
+			bufferPrintf("Volume down button changed state!\r\n");
+			break;
+	}
+}
+
 
 void OpenIBootStart() {
 	setup_openiboot();
@@ -196,38 +217,18 @@ void OpenIBootStart() {
 */
 
 #ifdef CONFIG_IPOD2G
-	// GPIO demo: show whenever a button is pressed
-	int home_state = gpio_pin_state(BUTTONS_HOME);
-	int hold_state = gpio_pin_state(BUTTONS_HOLD);
-	int volup_state = gpio_pin_state(BUTTONS_VOLUP);
-	int voldown_state = gpio_pin_state(BUTTONS_VOLDOWN);
+	gpio_register_interrupt(BUTTONS_HOLD_IRQ, BUTTONS_HOLD_IRQTYPE, BUTTONS_HOLD_IRQLEVEL, BUTTONS_HOLD_IRQAUTOFLIP, gpio_test_handler, 0);
+	gpio_interrupt_enable(BUTTONS_HOLD_IRQ);
+	gpio_register_interrupt(BUTTONS_HOME_IRQ, BUTTONS_HOME_IRQTYPE, BUTTONS_HOME_IRQLEVEL, BUTTONS_HOME_IRQAUTOFLIP, gpio_test_handler, 1);
+	gpio_interrupt_enable(BUTTONS_HOME_IRQ);
+	gpio_register_interrupt(BUTTONS_VOLUP_IRQ, BUTTONS_VOLUP_IRQTYPE, BUTTONS_VOLUP_IRQLEVEL, BUTTONS_VOLUP_IRQAUTOFLIP, gpio_test_handler, 2);
+	gpio_interrupt_enable(BUTTONS_VOLUP_IRQ);
+	gpio_register_interrupt(BUTTONS_VOLDOWN_IRQ, BUTTONS_VOLDOWN_IRQTYPE, BUTTONS_VOLDOWN_IRQLEVEL, BUTTONS_VOLDOWN_IRQAUTOFLIP, gpio_test_handler, 3);
+	gpio_interrupt_enable(BUTTONS_VOLDOWN_IRQ);
 #endif
 
 	// Process command queue
 	while(TRUE) {
-#ifdef CONFIG_IPOD2G
-		// GPIO demo: show whenever a button is pressed
-		if (home_state != gpio_pin_state(BUTTONS_HOME)) {
-			home_state = gpio_pin_state(BUTTONS_HOME);
-			bufferPrintf("Home button %s\r\n", home_state ? "pressed" : "released");
-			udelay(1000);
-		}
-		if (hold_state != gpio_pin_state(BUTTONS_HOLD)) {
-			hold_state = gpio_pin_state(BUTTONS_HOLD);
-			bufferPrintf("Hold button %s\r\n", hold_state ? "pressed" : "released");
-			udelay(1000);
-		}
-		if (volup_state != gpio_pin_state(BUTTONS_VOLUP)) {
-			volup_state = gpio_pin_state(BUTTONS_VOLUP);
-			bufferPrintf("Volume up button %s\r\n", !volup_state ? "pressed" : "released");
-			udelay(1000);
-		}
-		if (voldown_state != gpio_pin_state(BUTTONS_VOLDOWN)) {
-			voldown_state = gpio_pin_state(BUTTONS_VOLDOWN);
-			bufferPrintf("Volume down button %s\r\n", !voldown_state ? "pressed" : "released");
-			udelay(1000);
-		}
-#endif
 		char* command = NULL;
 		CommandQueue* cur;
 		EnterCriticalSection();
