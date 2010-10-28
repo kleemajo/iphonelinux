@@ -187,7 +187,9 @@ void OpenIBootStart() {
 #endif
 	sdio_setup();
 	wlan_setup();
+*/
 	accel_setup();
+/*
 #if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 	als_setup();
 #endif
@@ -491,13 +493,12 @@ static int setup_devices() {
 
 	// Other devices
 	usb_shutdown();
-/*	uart_setup();
+	uart_setup();
 	i2c_setup();
 
-	dma_setup();
+//	dma_setup();
 
-	spi_setup();
-*/
+//	spi_setup();
 
 	return 0;
 }

@@ -1249,9 +1249,9 @@ OPIBCommand CommandList[] =
 #endif
 		{"hexdump", "display a block of memory like 'hexdump -C'", cmd_hexdump},
 		{"cat", "dumps a block of memory", cmd_cat},
-#ifndef CONFIG_IPOD2G
 		{"gpio_pinstate", "get the state of a GPIO pin", cmd_gpio_pinstate},
 		{"gpio_out", "set the state of a GPIO pin", cmd_gpio_out},
+#ifndef CONFIG_IPOD2G
 		{"dma", "perform a DMA transfer", cmd_dma},
 		{"nand_read", "read a page of NAND into RAM", cmd_nand_read},
 		{"nand_write", "write a page of NAND", cmd_nand_write},
@@ -1273,7 +1273,9 @@ OPIBCommand CommandList[] =
 		{"nor_erase", "erase a block of NOR", cmd_nor_erase},
 		{"iic_read", "read a IIC register", cmd_iic_read},
 		{"iic_write", "write a IIC register", cmd_iic_write},
+#endif
 		{"accel", "display accelerometer data", cmd_accel},
+#ifndef CONFIG_IPOD2G
 #if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		{"als", "display ambient light sensor data", cmd_als},
 		{"als_channel", "set channel to get ALS data from", cmd_als_channel},
@@ -1319,7 +1321,9 @@ OPIBCommand CommandList[] =
 		{"version", "display the version string", cmd_version},
 #ifndef CONFIG_IPOD2G
 		{"time", "display the current time according to the RTC", cmd_time},
+#endif
 		{"wdt", "display the current wdt stats", cmd_wdt},
+#ifndef CONFIG_IPOD2G
 		{"audiohw_transfers_done", "display how many times the audio buffer has been played", cmd_audiohw_transfers_done},
 		{"audiohw_play_pcm", "queue some PCM data for playback", cmd_audiohw_play_pcm},
 		{"audiohw_headphone_vol", "set the headphone volume", cmd_audiohw_headphone_vol},
