@@ -129,6 +129,12 @@ typedef struct USBEPRegisters {
 	volatile uint32_t dmaBuffer;
 } USBEPRegisters;
 
+typedef enum USBChargerIdentificationMode {
+	USBChargerIdentificationDN,
+	USBChargerIdentificationDP,
+	USBChargerIdentificationNone,
+} USBChargerIdentificationMode;
+
 typedef struct USBDeviceDescriptor {
 	uint8_t bLength;
 	uint8_t bDescriptorType;
@@ -273,6 +279,8 @@ void usb_send_interrupt(uint8_t endpoint, void* buffer, int bufferLen, USBEndpoi
 void usb_send_bulk(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
 void usb_receive_bulk(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
 void usb_receive_interrupt(uint8_t endpoint, void* buffer, int bufferLen, USBEndpointHandler handler);
+
+void usb_set_charger_identification_mode(USBChargerIdentificationMode mode);
 
 USBSpeed usb_get_speed();
 uint16_t getPacketSizeFromSpeed(void);

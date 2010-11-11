@@ -36,6 +36,17 @@
 #define PMU_GPIO_CHARGER_USB_500_1000 0x1705
 #define PMU_GPIO_CHARGER_USB_1000 0x704
 
+// PMU registers
+#ifdef CONFIG_IPOD2G         // S5L8720
+#define PMU_OOCSHDWN 0xA
+#define PMU_ADCSTS 0x2
+#define PMU_ADCCON 0x40
+#define PMU_ADCOUT1 0x41
+#define PMU_ADCOUT2 0x42
+#define PMU_GPMEM_START 0x60
+#define PMU_VOLTAGE1 0x6E
+#define PMU_VOLTAGE2 0x6D
+#else                        // S5L8900
 #define PMU_OOCSHDWN 0xC
 #define PMU_GPIOCTL 0x13
 #define PMU_GPIO1CFG 0x14
@@ -52,6 +63,8 @@
 #define PMU_RTCDT 0x5D
 #define PMU_RTCMT 0x5E
 #define PMU_RTCYR 0x5F
+#define PMU_GPMEM_START 0x67
+#endif
 
 #define PMU_RTCSC_MASK 0x7F
 #define PMU_RTCMN_MASK 0x7F

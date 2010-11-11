@@ -1,10 +1,14 @@
 #include "openiboot.h"
+#include "openiboot-asmhelpers.h"
 #include "pmu.h"
 #include "hardware/pmu.h"
 #include "i2c.h"
 #include "timer.h"
 #include "gpio.h"
 #include "lcd.h"
+#ifdef CONFIG_IPOD2G
+#include "usb.h"
+#endif
 
 static uint32_t GPMemCachedPresent = 0;
 static uint8_t GPMemCache[PMU_MAXREG + 1];
@@ -16,17 +20,36 @@ int pmu_setup() {
 void pmu_write_oocshdwn(int data) {
 	uint8_t registers[1];
 	uint8_t discardData[5];
+
+#ifdef CONFIG_IPOD2G
+	uint8_t poweroffData[] = {7, 0xD1, 0xFF, 0xF0};
+	registers[0] = 1;
+	i2c_rx(PMU_I2C_BUS, PMU_GETADDR, registers, sizeof(registers), discardData, 3);
+#else
 	uint8_t poweroffData[] = {7, 0xAA, 0xFC, 0x0, 0x0, 0x0};
 	registers[0] = 2;
-	i2c_rx(PMU_I2C_BUS, PMU_GETADDR, registers, sizeof(registers), discardData, sizeof(data));
+	i2c_rx(PMU_I2C_BUS, PMU_GETADDR, registers, sizeof(registers), discardData, 5);
+#endif
+
 	i2c_tx(PMU_I2C_BUS, PMU_SETADDR, poweroffData, sizeof(poweroffData));
 	pmu_write_reg(PMU_OOCSHDWN, data, FALSE);
+	
+	// Wait for the hardware to shut down
+#ifdef CONFIG_IPOD2G
+	EnterCriticalSection();
+#endif
 	while(TRUE) {
 		udelay(100000);
 	}
 }
 
 void pmu_poweroff() {
+#ifdef CONFIG_IPOD2G
+	lcd_set_backlight_level(0);
+	//TODO S5L8720: lcd not implemented yet
+	//lcd_shutdown();
+	pmu_write_oocshdwn(PMU_OOCSHDWN_GOSTBY);
+#else
 	lcd_shutdown();
 
 	//pmu_write_oocshdwn(PMU_OOCSHDWN_GOSTBY);
@@ -35,6 +58,7 @@ void pmu_poweroff() {
 	pmu_write_reg(0x0f, 0x7, FALSE);		// Set the debounce for ONKEY to 2s.
 	pmu_write_reg(0x76, 0x80, FALSE);		// I have no idea what this does, it's from the iOS kernel.
 	pmu_write_reg(PMU_OOCSHDWN, 3, FALSE);
+#endif
 }
 
 void pmu_set_iboot_stage(uint8_t stage) {
@@ -53,7 +77,7 @@ int pmu_get_gpmem_reg(int reg, uint8_t* out) {
 	if((GPMemCachedPresent & (0x1 << reg)) == 0) {
 		uint8_t registers[1];
 
-		registers[0] = reg + 0x67;
+		registers[0] = reg + PMU_GPMEM_START;
 
 		if(i2c_rx(PMU_I2C_BUS, PMU_GETADDR, registers, 1, &GPMemCache[reg], 1) != 0) {
 			return -1;
@@ -68,7 +92,7 @@ int pmu_get_gpmem_reg(int reg, uint8_t* out) {
 }
 
 int pmu_set_gpmem_reg(int reg, uint8_t data) {
-	if(pmu_write_reg(reg + 0x67, data, TRUE) == 0) {
+	if(pmu_write_reg(reg + PMU_GPMEM_START, data, TRUE) == 0) {
 		GPMemCache[reg] = data;
 		GPMemCachedPresent |= (0x1 << reg);
 		return 0;
@@ -125,6 +149,32 @@ int pmu_write_regs(const PMURegisterData* regs, int num) {
 	return 0;
 }
 
+#ifdef CONFIG_IPOD2G
+int query_adc_s5l8720(int flags, uint32_t* result) {
+	// clear the done bit if it is set
+	pmu_get_reg(PMU_ADCSTS);
+	
+	// set up flags
+	if (flags == 0x3) {
+		pmu_write_reg(PMU_ADCCON, flags | 0x20, FALSE);
+		udelay(80000);
+	}
+	pmu_write_reg(PMU_ADCCON, flags | 0x10, FALSE);
+	
+	// wait until done
+	uint64_t startTime = timer_get_system_microtime();
+	while (!(pmu_get_reg(PMU_ADCSTS) & 0x2)) {
+		if (has_elapsed(startTime, 40000)) {
+			return -1;
+		}
+	}
+
+	uint8_t out[2];
+	pmu_get_regs(PMU_ADCOUT1, out, 2);
+	*result = (out[1] << 2) | (out[0] & 0x3);
+	return 0;
+}
+#else
 int query_adc(int flags) {
 	pmu_write_reg(PMU_ADCC3, 0, FALSE);
 	pmu_write_reg(PMU_ADCC3, 0, FALSE);
@@ -140,13 +190,21 @@ int query_adc(int flags) {
 		return -1;
 	}
 }
+#endif
 
 int pmu_get_battery_voltage() {
+#ifdef CONFIG_IPOD2G 
+	return (pmu_get_reg(PMU_VOLTAGE1) << 8) | pmu_get_reg(PMU_VOLTAGE2);
+#else
 	return query_adc(0);
+#endif
 }
 
 static int bcd_to_int(int bcd) {
+#ifndef CONFIG_IPOD2G		//TODO S5L8720
 	return (bcd & 0xF) + (((bcd >> 4) & 0xF) * 10);
+#endif
+	return 0; //TODO: remove, debug
 }
 
 const char* get_dayofweek_str(int day) {
@@ -174,6 +232,7 @@ static const int days_in_months_leap_year[] = {0, 31, 60, 91, 121, 152, 182, 213
 static const int days_in_months[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
 uint64_t pmu_get_epoch()
 {
+#ifndef CONFIG_IPOD2G		//TODO S5L8720
 	int i;
 	int days;
 	int years;
@@ -215,6 +274,12 @@ uint64_t pmu_get_epoch()
 
 	secs += offset;
 	return secs;
+#endif
+	return 0;
+	//TODO: remove me
+	if (0) {
+		bcd_to_int(1);
+	}
 }
 
 void epoch_to_date(uint64_t epoch, int* year, int* month, int* day, int* day_of_week, int* hour, int* minute, int* second)
@@ -302,6 +367,39 @@ void pmu_date(int* year, int* month, int* day, int* day_of_week, int* hour, int*
 }
 
 static PowerSupplyType identify_usb_charger() {
+#ifdef CONFIG_IPOD2G
+	uint32_t dn;
+	uint32_t dp;
+
+	usb_set_charger_identification_mode(USBChargerIdentificationDN);
+	udelay(2000);
+	if (query_adc_s5l8720(6, &dn) != 0) {
+		dn = 0;
+	}
+
+	usb_set_charger_identification_mode(USBChargerIdentificationDP);
+	udelay(2000);
+	if (query_adc_s5l8720(6, &dp) != 0) {
+		dp = 0;
+	}
+
+	usb_set_charger_identification_mode(USBChargerIdentificationNone);
+	if (dn < 0xCC || dp < 0xCC) {
+		return PowerSupplyTypeUSBHost;
+	}
+
+	int x = (dn * 1000) / dp;
+	if((x - 1291) <= 214) {
+		return PowerSupplyTypeUSBBrick1000mA;
+	}
+
+	if((x - 901) <= 219 && dp <= 479 ) {
+		return PowerSupplyTypeUSBBrick500mA;
+	} else {
+		return PowerSupplyTypeUSBHost;
+	}
+
+#else
 	int dn;
 	int dp;
 
@@ -331,9 +429,22 @@ static PowerSupplyType identify_usb_charger() {
 	} else {
 		return PowerSupplyTypeUSBHost;
 	}
+#endif
 }
 
 PowerSupplyType pmu_get_power_supply() {
+#ifdef CONFIG_IPOD2G
+	if (pmu_get_reg(0x4) & 1<<3) {
+		// USB powered
+		return identify_usb_charger();
+	} else if (pmu_get_reg(0x6) & 1<<3) {
+		// Firewire powered
+		return PowerSupplyTypeFirewire;
+	} else {
+		// Battery powered
+		return PowerSupplyTypeBattery;
+	}
+#else
 	int mbcs1 = pmu_get_reg(PMU_MBCS1);
 
 	if(mbcs1 & PMU_MBCS1_ADAPTPRES)
@@ -343,11 +454,12 @@ PowerSupplyType pmu_get_power_supply() {
 		return identify_usb_charger();
 	else
 		return PowerSupplyTypeBattery;
-
-
+#endif
 }
 
 void pmu_charge_settings(int UseUSB, int SuspendUSB, int StopCharger) {
+#ifndef CONFIG_IPOD2G
+	//TODO S5L8720: this is all done via i2c ont the 2g touch instead of GPIO... needs a full rewrite
 	PowerSupplyType type = pmu_get_power_supply();
 
 	if(type != PowerSupplyTypeUSBHost)	// No need to suspend USB, since we're not plugged into a USB host
@@ -375,10 +487,12 @@ void pmu_charge_settings(int UseUSB, int SuspendUSB, int StopCharger) {
 		gpio_pin_output(PMU_GPIO_CHARGER_USB_1000, 1);
 	else
 		gpio_pin_output(PMU_GPIO_CHARGER_USB_1000, 0);
+#endif
 }
 
 int pmu_gpio(int gpio, int is_output, int value)
 {
+#ifndef CONFIG_IPOD2G		//TODO S5L8720
 	int mask;
 
 	if(gpio < 1 || gpio > 3)
@@ -392,6 +506,8 @@ int pmu_gpio(int gpio, int is_output, int value)
 		pmu_write_reg(PMU_GPIOCTL, pmu_get_reg(PMU_GPIOCTL) & ~mask, 0);
 	else
 		pmu_write_reg(PMU_GPIOCTL, pmu_get_reg(PMU_GPIOCTL) | mask, 0);
-
+#endif
 	return 0;
 }
+
+

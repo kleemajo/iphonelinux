@@ -98,9 +98,15 @@
 
 #define NUM_WINDOWS 3
 
+#ifdef CONFIG_IPOD2G
+#define LCD_MAX_BACKLIGHT 245
+#define LCD_BACKLIGHT_REG 0x30
+#define LCD_BACKLIGHT_REGMASK 0xFF
+#else
 #define LCD_MAX_BACKLIGHT 45
 #define LCD_BACKLIGHT_REG 0x28
 #define LCD_BACKLIGHT_REGMASK 0x3F
+#endif
 
 #endif
 

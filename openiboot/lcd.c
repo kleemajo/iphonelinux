@@ -132,8 +132,18 @@ static const GammaTableDescriptor gammaTables[] =
 		}
 	};
 
+#ifdef CONFIG_IPOD2G
+static const PMURegisterData backlightOffData = {0x31, 0x0};
+#else
 static const PMURegisterData backlightOffData = {0x29, 0x0};
+#endif
 
+#ifdef CONFIG_IPOD2G
+static const PMURegisterData backlightData[] = {
+	{0x30, 0x30},
+	{0x31, 0x5}
+};
+#else
 static const PMURegisterData backlightData[] = {
 	{0x17, 0x1},
 	{0x2A, 0x0},
@@ -141,6 +151,7 @@ static const PMURegisterData backlightData[] = {
 	{0x29, 0x1},
 	{0x2A, 0x6}
 };
+#endif
 
 static int initDisplay();
 static int syrah_init();
@@ -179,10 +190,30 @@ static void installGammaTable(int tableNo, uint8_t* table);
 
 static void syrah_quiesce();
 
+#ifdef CONFIG_IPOD2G
+void use_initialized_framebuffer_hax(void) {
+	//TODO: remove hax
+	Window * win = malloc(sizeof(Window));
+	win->created = 1;
+	win->width = 320;
+	win->height = 480;
+	win->lineBytes = 4*(320 + calculateStrideLen(RGB888, 0, 320));
+	currentWindow = win;
+	createFramebuffer(&win->framebuffer, 0x0fc00000, 320, 480, win->lineBytes/4, RGB888);
+	NextFramebuffer = 0x0fc00000;
+	CurFramebuffer = (uint32_t *)0x0fc00000;
+}
+#endif
+
+
 int lcd_setup() {
 	int backlightLevel = 0;
 
+#ifdef CONFIG_IPOD2G
+	NextFramebuffer = 0x0fc00000;
+#else
 	NextFramebuffer = 0x0fd00000;
+#endif
 	numWindows = 2;
 
 	if(!lcd_has_init) {
@@ -1277,12 +1308,13 @@ void lcd_set_backlight_level(int level) {
 
 		memcpy(myBacklightData, backlightData, sizeof(myBacklightData));
 
-		if(level <= LCD_MAX_BACKLIGHT) {
-			int i;
-			for(i = 0; i < (sizeof(myBacklightData)/sizeof(PMURegisterData)); i++) {
-				if(myBacklightData[i].reg == LCD_BACKLIGHT_REG) {
-					myBacklightData[i].data = level & LCD_BACKLIGHT_REGMASK;
-				}
+		if (level > LCD_MAX_BACKLIGHT) {
+			level = LCD_MAX_BACKLIGHT;		
+		}
+		int i;
+		for(i = 0; i < (sizeof(myBacklightData)/sizeof(PMURegisterData)); i++) {
+			if(myBacklightData[i].reg == LCD_BACKLIGHT_REG) {
+				myBacklightData[i].data = level & LCD_BACKLIGHT_REGMASK;
 			}
 		}
 		pmu_write_regs(myBacklightData, sizeof(myBacklightData)/sizeof(PMURegisterData));

@@ -1216,8 +1216,8 @@ void cmd_piezo_play(int argc, char** argv) {
 	bufferPrintf("done\r\n");
 
 }
-
 #endif
+
 OPIBCommand CommandList[] = 
 	{
 #ifndef CONFIG_IPOD2G
@@ -1232,9 +1232,7 @@ OPIBCommand CommandList[] =
 		{"nor_write", "write RAM into NOR", cmd_nor_write},
 #endif
 		{"help", "list the available commands", cmd_help},
-#ifndef CONFIG_IPOD2G
 		{"poweroff", "power off the device", cmd_poweroff},
-#endif
 		{"echo", "echo back a line", cmd_echo},
 #ifndef CONFIG_IPOD2G
 		{"clear", "clears the screen", cmd_clear},
@@ -1298,11 +1296,13 @@ OPIBCommand CommandList[] =
 #endif
 		{"images_list", "list the images available on NOR", cmd_images_list},
 		{"images_read", "read an image on NOR", cmd_images_read},
+#endif
 		{"pmu_voltage", "get the battery voltage", cmd_pmu_voltage},
 		{"pmu_powersupply", "get the power supply type", cmd_pmu_powersupply},
+#ifndef CONFIG_IPOD2G
 		{"pmu_charge", "turn on and off the power charger", cmd_pmu_charge},
-		{"pmu_nvram", "list powernvram registers", cmd_pmu_nvram},
 #endif
+		{"pmu_nvram", "list powernvram registers", cmd_pmu_nvram},
 		{"malloc_stats", "display malloc stats", cmd_malloc_stats},
 		{"frequency", "display clock frequencies", cmd_frequency},
 #ifndef CONFIG_IPOD2G
@@ -1310,12 +1310,16 @@ OPIBCommand CommandList[] =
 		{"setenv", "sets an environment variable", cmd_setenv},
 		{"saveenv", "saves the environment variables in nvram", cmd_saveenv},
 		{"bgcolor", "fill the framebuffer with a color", cmd_bgcolor},
+#endif
 		{"backlight", "set the backlight level", cmd_backlight},
+#ifndef CONFIG_IPOD2G
 		{"kernel", "load a Linux kernel", cmd_kernel},
 		{"ramdisk", "load a Linux ramdisk", cmd_ramdisk},
 		{"rootfs", "specify a file as the Linux rootfs", cmd_rootfs},
 		{"boot", "boot a Linux kernel", cmd_boot},
+#endif
 		{"go", "jump to a specified address (interrupts disabled)", cmd_go},
+#ifndef CONFIG_IPOD2G
 		{"jump", "jump to a specified address (interrupts enabled)", cmd_jump},
 #endif
 		{"version", "display the version string", cmd_version},
@@ -1338,6 +1342,6 @@ OPIBCommand CommandList[] =
 		{"play", "play notes using piezo bytes", cmd_piezo_play},
 #endif
 		{"multitouch_setup", "set up the multitouch chip", cmd_multitouch_setup},		
-#endif		
+#endif
 		{NULL, NULL}
 	};

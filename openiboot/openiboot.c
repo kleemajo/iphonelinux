@@ -101,10 +101,14 @@ void OpenIBootStart() {
 	setup_openiboot();
 /*
 	pmu_charge_settings(TRUE, FALSE, FALSE);
-
+*/
+/*
+	//TODO: uncomment these 3 lines to get the hacked framebuffer to work
 	framebuffer_setdisplaytext(TRUE);
 	framebuffer_clear();
 	bufferPrintf("Loading openiBoot...");
+*/
+/*
 #ifndef SMALL
 #ifndef NO_STBIMAGE
 	int defaultOS = 0;
@@ -198,8 +202,9 @@ void OpenIBootStart() {
 #ifndef NO_HFS
 	fs_setup();
 #endif
-
+*/
 	pmu_set_iboot_stage(0);
+/*
 	startScripting("openiboot"); //start script mode if there is a file
 */
 	bufferPrintf("version: %s\r\n", OPENIBOOT_VERSION_STR);
@@ -248,7 +253,6 @@ void OpenIBootStart() {
 		}
 	}
 	// should not reach here
-
 }
 
 static uint8_t* controlSendBuffer = NULL;
@@ -493,7 +497,7 @@ static int setup_devices() {
 
 	// Other devices
 	usb_shutdown();
-	uart_setup();
+//	uart_setup();
 	i2c_setup();
 
 //	dma_setup();
@@ -514,18 +518,25 @@ static int setup_openiboot() {
 #ifndef CONFIG_IPOD2G
 	clock_set_sdiv(0);
 #endif
-/*
-	aes_setup();
 
-	nor_setup();
-	syscfg_setup();
-	images_setup();
-	nvram_setup();
+//	aes_setup();
 
-	lcd_setup();
-	framebuffer_setup();
-	audiohw_init();
-*/
+//	nor_setup();
+//	syscfg_setup();
+//	images_setup();
+//	nvram_setup();
+
+//	lcd_setup();
+	//TODO: this will use the framebuffer that iboot initialized before. This is not enabled in my commit
+	// purely because I don't want to deal with people who think that openiboot is done because LCD is "working".
+	// To enable the hacked framebuffer, uncomment this, and the three lines with a comment at the start of
+	// OpeniBootStart
+	if (0) {
+		use_initialized_framebuffer_hax();
+		framebuffer_setup();	
+	}
+//	audiohw_init();
+
 
     isMultitouchLoaded = 0;
 	return 0;

@@ -150,10 +150,10 @@ int usb_setup(USBEnumerateHandler hEnumerate, USBStartHandler hStart) {
 			break;
 	}
 
-	SET_REG(USB_PHY + OPHYCLK, (GET_REG(USB_PHY + OPHYCLK) & OPHYCLK_CLKSEL_MASK) | phyClockBits);
+	SET_REG(USB_PHY + OPHYCLK, (GET_REG(USB_PHY + OPHYCLK) & ~OPHYCLK_CLKSEL_MASK) | phyClockBits);
 #else
 	//TODO: get clock_get_frequency working for S5L8900
-	SET_REG(USB_PHY + OPHYCLK, (GET_REG(USB_PHY + OPHYCLK) & OPHYCLK_CLKSEL_MASK) | OPHYCLK_CLKSEL_48MHZ);
+	SET_REG(USB_PHY + OPHYCLK, (GET_REG(USB_PHY + OPHYCLK) & ~OPHYCLK_CLKSEL_MASK) | OPHYCLK_CLKSEL_48MHZ);
 #endif
 
 	// reset phy
@@ -1277,7 +1277,20 @@ static void handleEndpointTransferCompleted(uint8_t endpoint, USBDirection direc
 	handleTransferCompleted(completedTransfer);
 }
 
-
+void usb_set_charger_identification_mode(USBChargerIdentificationMode mode) {
+	// Enter a specific mode where we can figure out which charger we are using.
+	// These bits enable some PMU ADC stuff.
+	uint32_t bits = 0;
+	if (mode == USBChargerIdentificationDN) {
+		bits = OPHY_CHARGER_DN;
+	} else if (mode == USBChargerIdentificationDP) {
+		bits = OPHY_CHARGER_DP;
+	} else if (mode == USBChargerIdentificationNone) {
+		bits = OPHY_CHARGER_NONE;
+	}
+	SET_REG(USB_PHY + OPHY_CHARGER_IDENTIFY, (GET_REG(USB_PHY + OPHY_CHARGER_IDENTIFY)
+			& ~OPHY_CHARGER_MASK) | bits); 
+}
 
 
 

@@ -13,7 +13,7 @@
 #define ORSTCON                     0x8
 #define OPHYUNK1                    0x1C
 #define OPHYUNK2                    0x44
-#define OPHYUNK3                    0x48
+#define OPHY_CHARGER_IDENTIFY       0x48
 
 // OTG Registers
 #define GOTGCTL                     0x0     // core USB configuration
@@ -106,6 +106,13 @@
 #define OPHYUNK1_START              0x6
 #define OPHYUNK1_STOP_MASK          0x2
 #define OPHYUNK2_START              0xE3F
+#endif
+
+#ifdef CONFIG_IPOD2G
+#define OPHY_CHARGER_DN             (1 << 2)
+#define OPHY_CHARGER_DP             (1 << 1)
+#define OPHY_CHARGER_NONE           0
+#define OPHY_CHARGER_MASK           0x6
 #endif
 
 #define GOTGCTL_BSESSIONVALID       (1 << 19)
