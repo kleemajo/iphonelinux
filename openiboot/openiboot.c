@@ -102,12 +102,10 @@ void OpenIBootStart() {
 /*
 	pmu_charge_settings(TRUE, FALSE, FALSE);
 */
-/*
-	//TODO: uncomment these 3 lines to get the hacked framebuffer to work
 	framebuffer_setdisplaytext(TRUE);
 	framebuffer_clear();
 	bufferPrintf("Loading openiBoot...");
-*/
+
 /*
 #ifndef SMALL
 #ifndef NO_STBIMAGE
@@ -527,14 +525,10 @@ static int setup_openiboot() {
 //	nvram_setup();
 
 //	lcd_setup();
-	//TODO: this will use the framebuffer that iboot initialized before. This is not enabled in my commit
-	// purely because I don't want to deal with people who think that openiboot is done because LCD is "working".
-	// To enable the hacked framebuffer, uncomment this, and the three lines with a comment at the start of
-	// OpeniBootStart
-	if (0) {
-		use_initialized_framebuffer_hax();
-		framebuffer_setup();	
-	}
+
+	use_initialized_framebuffer_hax();
+	framebuffer_setup();
+
 //	audiohw_init();
 
 
