@@ -478,12 +478,13 @@ void cmd_backlight(int argc, char** argv) {
 	bufferPrintf("backlight set to %d\r\n", level);
 }
 
+#include "spi.h"
+
 void cmd_echo(int argc, char** argv) {
 	int i;
 	for(i = 1; i < argc; i++) {
 		bufferPrintf("%s ", argv[i]);
 	}
-	bufferPrintf("nor status: %x\r\n", nor_get_status());
 	bufferPrintf("\r\n");
 }
 
@@ -1273,7 +1274,9 @@ OPIBCommand CommandList[] =
 		{"fs_extract", "extract a file into memory", fs_cmd_extract},
 		{"fs_add", "store a file from memory", fs_cmd_add},
 #endif
+#endif
 		{"nor_erase", "erase a block of NOR", cmd_nor_erase},
+#ifndef CONFIG_IPOD2G
 		{"iic_read", "read a IIC register", cmd_iic_read},
 		{"iic_write", "write a IIC register", cmd_iic_write},
 #endif

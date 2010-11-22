@@ -17,7 +17,7 @@
 #define CONTROL 0x0
 #define SETUP 0x4
 #define STATUS 0x8
-#define UNKREG1 0xC
+#define SPIPIN 0xC
 #define TXDATA 0x10
 #define RXDATA 0x20
 #define CLKDIVIDER 0x30
@@ -39,16 +39,16 @@
 #define SPISETUP_UNKN2                      (1 << 8)    // 1 bit
 #ifdef CONFIG_IPOD2G
 #define SPISETUP_CLOCKSOURCE                (1 << 14)   // 1 bit
-#define SPISETUP_OPTION13                   (1 << 15)   // 1 bit
+#define SPISETUP_WORDSIZE                   (1 << 15)   // 2 bits
 #else
 #define SPISETUP_CLOCKSOURCE                (1 << 12)   // 1 bit
-#define SPISETUP_OPTION13                   (1 << 13)   // 1 bit
+#define SPISETUP_WORDSIZE                   (1 << 13)   // 2 bits
 #endif
 #define SPISETUP_UNKN3                      (1 << 21)   // 1 bit
 
 // Values
 #ifdef CONFIG_IPOD2G
-#define MAX_TX_BUFFER 8		//TODO: this is 8 in some places (spi_tx), 16 in others (spi_irq_handler)... figure that out
+#define MAX_TX_BUFFER 16
 #define TX_BUFFER_LEFT(x) GET_BITS(x, 6, 5)
 #define RX_BUFFER_LEFT(x) GET_BITS(x, 11, 5)
 #else
@@ -59,10 +59,10 @@
 
 #ifdef CONFIG_IPOD2G
 #define CLOCK_SHIFT 14
-#define OPTION13_SHIFT 15
+#define WORDSIZE_SHIFT 15
 #else
 #define CLOCK_SHIFT 12
-#define OPTION13_SHIFT 13
+#define WORDSIZE_SHIFT 13
 #endif
 #define MAX_DIVIDER 0x3FF
 
