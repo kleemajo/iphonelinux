@@ -388,7 +388,7 @@ void spi_process_irq_tx_rx(uint32_t port, uint32_t status, Boolean startWithTX) 
 			if (spi_info[port].txBuffer != NULL) {
 				if(spi_info[port].txCurrentLen < spi_info[port].txTotalLen) {
 					int toTX = spi_info[port].txTotalLen - spi_info[port].txCurrentLen;
-					int canTX = 16 - TX_BUFFER_LEFT(status);	//TODO: figure out why 16 != TX_BUFFER_LEFT
+					int canTX = 8 - TX_BUFFER_LEFT(status);	//TODO: figure out why 16 != TX_BUFFER_LEFT
 			
 					if(toTX > canTX)
 						toTX = canTX;
@@ -456,7 +456,7 @@ static void spiIRQHandler(uint32_t port) {
 				if(spi_info[port].txCurrentLen < spi_info[port].txTotalLen)
 				{
 					int toTX = spi_info[port].txTotalLen - spi_info[port].txCurrentLen;
-					int canTX = (MAX_TX_BUFFER - TX_BUFFER_LEFT(status));
+					int canTX = (8 - TX_BUFFER_LEFT(status));	//TODO: figure out the 16!
 
 					if(toTX > canTX)
 						toTX = canTX;
@@ -467,6 +467,10 @@ static void spiIRQHandler(uint32_t port) {
 				} else {
 					spi_info[port].txDone = TRUE;
 					spi_info[port].txBuffer = NULL;
+#ifdef CONFIG_IPOD2G
+					spi_info[port].setupOptions &= ~SPISETUP_UNKN3;
+					SET_REG(SPIRegs[port].setup, spi_info[port].setupOptions);
+#endif
 				}
 			}
 
@@ -476,7 +480,7 @@ dorx:
 				break;
 
 			int toRX = spi_info[port].rxTotalLen - spi_info[port].rxCurrentLen;
-			int canRX = GET_BITS(status, 8, 4) << spi_info[port].wordSize;
+			int canRX = RX_BUFFER_LEFT(status) << spi_info[port].wordSize;
 
 			if(toRX > canRX)
 				toRX = canRX;
@@ -489,6 +493,10 @@ dorx:
 
 			spi_info[port].rxDone = TRUE;
 			spi_info[port].rxBuffer = NULL;
+#ifdef CONFIG_IPOD2G
+			spi_info[port].setupOptions &= ~SPISETUP_UNKN1;
+			SET_REG(SPIRegs[port].setup, spi_info[port].setupOptions);
+#endif
 		}
 
 
@@ -499,6 +507,13 @@ dorx:
 
 	// acknowledge interrupt handling complete
 	SET_REG(SPIRegs[port].status, status);
+
+#ifdef CONFIG_IPOD2G
+	if (spi_info[port].rxBuffer == NULL && spi_info[port].txBuffer == NULL) {
+		spi_info[port].setupOptions &= ~SPISETUP_UNKN2;
+		SET_REG(SPIRegs[port].setup, spi_info[port].setupOptions);
+	}
+#endif
 /*
 	bufferPrintf(".");
 	if(port > (NUM_SPIPORTS - 1)) {
