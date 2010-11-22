@@ -11,12 +11,9 @@ typedef struct NorChipInfo {
 	uint8_t device;
 	Boolean aaiEnabled;
 	uint32_t eraseBlockSize;
-	uint32_t unkn5;
 	uint32_t blockProtectBits;
 	uint32_t bytesPerWrite;
-	uint32_t unkn2;
 	uint32_t writeTimeout;
-	uint32_t unkn4;
 } NorChipInfo;
 #endif
 
