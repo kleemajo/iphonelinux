@@ -23,13 +23,47 @@
 #define CLKDIVIDER 0x30
 #define SPCNT 0x34
 #define SPIDD 0x38
+#define UNKREG4 0x3C
+#define UNKREG5 0x40
+#define UNKREG6 0x44
+#define UNKREG7 0x48
+#define TXBUFFERLEN 0x4C
+
+// Setup register
+#define SPISETUP_NO_TRANSMIT_JUNK           (1 << 0)    // 1 bit
+#define SPISETUP_LAST_CLOCK_EDGE_MISSING    (1 << 1)    // 1 bit
+#define SPISETUP_IS_ACTIVE_LOW              (1 << 2)    // 1 bit
+#define SPISETUP_IS_MASTER                  (1 << 3)    // 2 bits
+#define SPISETUP_OPTION5                    (1 << 5)    // 2 bits
+#define SPISETUP_UNKN1                      (1 << 7)    // 1 bit
+#define SPISETUP_UNKN2                      (1 << 8)    // 1 bit
+#ifdef CONFIG_IPOD2G
+#define SPISETUP_CLOCKSOURCE                (1 << 14)   // 1 bit
+#define SPISETUP_OPTION13                   (1 << 15)   // 1 bit
+#else
+#define SPISETUP_CLOCKSOURCE                (1 << 12)   // 1 bit
+#define SPISETUP_OPTION13                   (1 << 13)   // 1 bit
+#endif
+#define SPISETUP_UNKN3                      (1 << 21)   // 1 bit
 
 // Values
+#ifdef CONFIG_IPOD2G
+#define MAX_TX_BUFFER 8		//TODO: this is 8 in some places (spi_tx), 16 in others (spi_irq_handler)... figure that out
+#define TX_BUFFER_LEFT(x) GET_BITS(x, 6, 5)
+#define RX_BUFFER_LEFT(x) GET_BITS(x, 11, 5)
+#else
 #define MAX_TX_BUFFER 8
-#define TX_BUFFER_LEFT(x) GET_BITS(status, 4, 4)
-#define RX_BUFFER_LEFT(x) GET_BITS(status, 8, 4)
+#define TX_BUFFER_LEFT(x) GET_BITS(x, 4, 4)
+#define RX_BUFFER_LEFT(x) GET_BITS(x, 8, 4)
+#endif
 
+#ifdef CONFIG_IPOD2G
+#define CLOCK_SHIFT 14
+#define OPTION13_SHIFT 15
+#else
 #define CLOCK_SHIFT 12
+#define OPTION13_SHIFT 13
+#endif
 #define MAX_DIVIDER 0x3FF
 
 #ifdef CONFIG_IPOD2G
@@ -82,8 +116,7 @@
 #endif
 
 #ifdef CONFIG_IPOD2G
-#define NUM_SPIPORTS 3
-//TODO: switch this to 5 eventually (needed for multitouch which is on SPI4!). This is left at 3 for now for debugging purposes).
+#define NUM_SPIPORTS 5
 #else
 #define NUM_SPIPORTS 3
 #endif

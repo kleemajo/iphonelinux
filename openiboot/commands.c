@@ -465,7 +465,11 @@ void cmd_bgcolor(int argc, char** argv) {
 
 void cmd_backlight(int argc, char** argv) {
 	if(argc < 2) {
+#ifdef CONFIG_IPOD2G
+		bufferPrintf("Usage: %s <0-245>\r\n", argv[0]);
+#else
 		bufferPrintf("Usage: %s <0-45>\r\n", argv[0]);
+#endif
 		return;
 	}
 
@@ -479,6 +483,7 @@ void cmd_echo(int argc, char** argv) {
 	for(i = 1; i < argc; i++) {
 		bufferPrintf("%s ", argv[i]);
 	}
+	bufferPrintf("nor status: %x\r\n", nor_get_status());
 	bufferPrintf("\r\n");
 }
 
@@ -1228,9 +1233,9 @@ OPIBCommand CommandList[] =
 #ifndef CONFIG_IPOD2G
 		{"multitouch_fw_install", "install the multitouch firmware", cmd_multitouch_fw_install},
 		{"nand_erase", "erase a NAND block", cmd_nand_erase},
+#endif
 		{"nor_read", "read a block of NOR into RAM", cmd_nor_read},
 		{"nor_write", "write RAM into NOR", cmd_nor_write},
-#endif
 		{"help", "list the available commands", cmd_help},
 		{"poweroff", "power off the device", cmd_poweroff},
 		{"echo", "echo back a line", cmd_echo},
@@ -1273,17 +1278,18 @@ OPIBCommand CommandList[] =
 		{"iic_write", "write a IIC register", cmd_iic_write},
 #endif
 		{"accel", "display accelerometer data", cmd_accel},
-#ifndef CONFIG_IPOD2G
 #if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		{"als", "display ambient light sensor data", cmd_als},
 		{"als_channel", "set channel to get ALS data from", cmd_als_channel},
 		{"als_en", "enable continuous reporting of ALS data", cmd_als_en},
 		{"als_dis", "disable continuous reporting of ALS data", cmd_als_dis},
 #endif
+#ifndef CONFIG_IPOD2G
 		{"sdio_status", "display sdio registers", cmd_sdio_status},
 		{"sdio_setup", "restart SDIO stuff", cmd_sdio_setup},
 		{"wlan_prog_helper", "program wlan fw helper", cmd_wlan_prog_helper},
 		{"wlan_prog_real", "program wlan fw", cmd_wlan_prog_real},
+#endif
 #if !defined(CONFIG_IPOD) && !defined(CONFIG_IPOD2G)
 		{"radio_send", "send a command to the baseband", cmd_radio_send},
 		{"radio_nvram_list", "list entries in baseband NVRAM", cmd_radio_nvram_list},
@@ -1296,7 +1302,6 @@ OPIBCommand CommandList[] =
 #endif
 		{"images_list", "list the images available on NOR", cmd_images_list},
 		{"images_read", "read an image on NOR", cmd_images_read},
-#endif
 		{"pmu_voltage", "get the battery voltage", cmd_pmu_voltage},
 		{"pmu_powersupply", "get the power supply type", cmd_pmu_powersupply},
 #ifndef CONFIG_IPOD2G
@@ -1305,10 +1310,10 @@ OPIBCommand CommandList[] =
 		{"pmu_nvram", "list powernvram registers", cmd_pmu_nvram},
 		{"malloc_stats", "display malloc stats", cmd_malloc_stats},
 		{"frequency", "display clock frequencies", cmd_frequency},
-#ifndef CONFIG_IPOD2G
 		{"printenv", "list the environment variables in nvram", cmd_printenv},
 		{"setenv", "sets an environment variable", cmd_setenv},
 		{"saveenv", "saves the environment variables in nvram", cmd_saveenv},
+#ifndef CONFIG_IPOD2G
 		{"bgcolor", "fill the framebuffer with a color", cmd_bgcolor},
 #endif
 		{"backlight", "set the backlight level", cmd_backlight},

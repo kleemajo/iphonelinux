@@ -104,8 +104,11 @@ void OpenIBootStart() {
 */
 	framebuffer_setdisplaytext(TRUE);
 	framebuffer_clear();
-	bufferPrintf("Loading openiBoot...");
+	bufferPrintf("Loading openiBoot...\r\n");
 
+	nor_setup();
+	nvram_setup();
+	images_setup();
 /*
 #ifndef SMALL
 #ifndef NO_STBIMAGE
@@ -500,7 +503,7 @@ static int setup_devices() {
 
 //	dma_setup();
 
-//	spi_setup();
+	spi_setup();
 
 	return 0;
 }

@@ -125,11 +125,14 @@ void nvram_save() {
 	NVRamAtom* atom = newestBank;
 	uint32_t offset = oldestBank;
 	while(atom != NULL) {
+		bufferPrintf("starting write to nor\r\n");
 		nor_write(atom->info, offset, sizeof(NVRamInfo));
 		offset += sizeof(NVRamInfo);
+		bufferPrintf("write 1 done\r\n");
 		nor_write(atom->data, offset, atom->size - sizeof(NVRamInfo));
 		offset += atom->size - sizeof(NVRamInfo);
 		atom = atom->next;
+		bufferPrintf("finished write to nor\r\n");
 	}
 
 	releaseAtoms(bank1Atoms);

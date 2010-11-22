@@ -48,5 +48,16 @@
 
 #define NOR_CLOCKGATE 0x1E
 
+#ifdef CONFIG_3G
+#define NOR_SPI_CS0 GPIO_SPI0_CS0
+#define NOR_SPI_PORT 0
+#elif defined(CONFIG_IPOD2G)
+#define NOR_SPI_CS0 GPIO_SPI1_CS0
+#define NOR_SPI_PORT 1
+#endif
+
+
+
+
 #endif
 

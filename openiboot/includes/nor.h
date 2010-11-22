@@ -17,5 +17,6 @@ void nor_read(void* buffer, int offset, int len);
 int nor_write(void* buffer, int offset, int len);
 
 int getNORSectorSize();
+uint8_t nor_get_status();
 
 #endif
